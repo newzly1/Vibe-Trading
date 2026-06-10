@@ -2,22 +2,84 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Essential Commands
+## Claude Code Integration: Vibe-Trading Financial Analysis
+
+Vibe-Trading's core financial analysis capabilities have been ported to Claude Code, bypassing V-T's own ReAct agent loop and using Claude Code's native reasoning for financial analysis.
+
+### Capability Overview
+
+| Capability | Vehicle | Purpose |
+|------------|---------|---------|
+| Domain knowledge | 77 `.claude/skills/vt-*` skills | Formulas, parameters, methodology reference (auto-discovered, loaded on demand) |
+| Data + computation | MCP tools (43, via `.mcp.json`) | Market data, backtesting, factor analysis, Alpha Zoo, options pricing, hypothesis registry, etc. |
+| Parallel analysis | Claude Code `Agent` tool + `dispatching-parallel-agents` skill | Replaces V-T's Swarm multi-agent framework |
+| Code execution | `Bash` tool | Run Python scripts for custom computation |
+
+### MCP Tools Quick Reference
+
+Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 43 tools:
+
+**Market data**: `get_market_data` — fetch OHLCV (A-shares / HK / US / crypto). For A-shares, explicitly specify `source="akshare"` or `source="tushare"`; do not rely on `source="auto"`.
+
+**Backtesting & analysis**: `backtest` (requires a pre-prepared directory with `config.json` + `code/signal_engine.py`), `factor_analysis` (factor IC/return analysis), `analyze_options` (options pricing & Greeks), `pattern_recognition` (candlestick pattern recognition).
+
+**Alpha Zoo**: `alpha_zoo` (browse/list/get 452 pre-built alphas), `alpha_bench` (batch benchmark a zoo — IC mean/std/IR/positive-ratio + HTML report), `alpha_compare` (head-to-head ranking of named alphas by IC metric).
+
+**Content tools**: `read_url`, `read_document`, `web_search`, `read_file`, `write_file`.
+
+**Trading connections**: `trading_connections`, `trading_select_connection`, `trading_check`, `trading_account`, `trading_positions`, `trading_orders`, `trading_quote`, `trading_history`.
+
+**Research goals**: `start_research_goal`, `get_research_goal`, `add_goal_evidence`, `update_research_goal_status`.
+
+**Hypothesis registry**: `create_hypothesis`, `update_hypothesis`, `link_backtest` (attach run cards), `search_hypotheses` (text search by status/query).
+
+**Other**: `list_skills`, `load_skill`, `list_runs`, `get_run_result`, `list_swarm_presets`, `run_swarm`, `get_swarm_status`, `reap_stale_runs`, `retry_run`, `analyze_trade_journal`, `extract_shadow_strategy`, `run_shadow_backtest`, `render_shadow_report`, `scan_shadow_signals`.
+
+### Skill Usage Guide
+
+77 `vt-*` skills are installed at `.claude/skills/`. Claude Code auto-discovers them at startup and injects one-line summaries into the system prompt. When a task touches a specific financial domain, the corresponding SKILL.md is auto-loaded as context.
+
+**Skills are knowledge documents, not executable code** — they provide formulas, parameters, and methodology references. Actual computation still requires MCP tools or Bash-executed Python.
+
+### Key Usage Patterns
+
+1. **Fetch → analyze → backtest** pipeline: call MCP tools directly in sequence; no agent loop needed.
+2. **Parallel analysis replacing Swarm**: use the `dispatching-parallel-agents` skill + `Agent` tool to spawn multiple analysis agents, then synthesize results. Do NOT use `run_swarm` (it still goes through V-T's ReAct loop, inheriting its issues).
+3. **Skill guidance + MCP execution**: consult the relevant vt-* skill for methodology first, then execute computation via MCP tools.
+
+### Known Limitations
+
+- `run_swarm` is not recommended — it still uses V-T's ReAct agent loop.
+- A-share data: `get_market_data` with `source="auto"` may route to an unsupported source; explicitly specify `source="akshare"` or `source="tushare"`.
+- `backtest` requires a pre-prepared directory with `config.json` + `code/signal_engine.py`.
+- The 77 skills are knowledge documents, not executable code.
+
+---
+
+## Project Architecture (Vibe-Trading Codebase)
+
+The sections below describe the repo's own architecture, for reference when modifying code, maintaining the MCP server, or extending skills.
+
+### Package Layout
+
+`pyproject.toml` maps `package-dir = {"" = "agent"}` — **`agent/` is the Python package root**. Inside it, `src/`, `backtest/`, and `cli/` are top-level packages. CLI entry points: `vibe-trading` → `cli:main`, `vibe-trading-mcp` → `mcp_server:main`.
+
+### Essential Commands
 
 ```bash
-# Install (editable + dev deps)
+# Install
 pip install -e ".[dev]"
 
 # Full test suite (exclude e2e and live-LLM tests)
 pytest --ignore=agent/tests/e2e_backtest --ignore=agent/tests/test_e2e_harness_v2.py --tb=short -q
 
-# Factor/alpha zoo gates only
+# Alpha zoo gates only
 pytest agent/tests/factors/test_alpha_purity.py agent/tests/factors/test_lookahead.py -q
 
 # Live trading safety tests
 pytest agent/tests/test_sdk_order_gate.py agent/tests/test_mandate_enforcement.py agent/tests/test_killswitch_blocks_orders.py agent/tests/test_readonly_default.py -q
 
-# Syntax check (before running tests)
+# Syntax check (run before tests)
 cd agent && python -m compileall -q cli && python -m py_compile api_server.py mcp_server.py
 
 # Frontend
@@ -25,43 +87,79 @@ cd frontend && npm ci && npm run build      # build
 cd frontend && npx vitest run               # test
 cd frontend && npm run dev                   # dev server (port 5899)
 
-# Lint (ruff config in pyproject.toml)
+# Lint
 ruff check agent/
 
 # Docker
 docker compose up --build
 ```
 
-## Architecture
+### MCP Server (`agent/mcp_server.py`)
 
-### Package Layout
+Built on `fastmcp`. Exposes V-T's tool registry as MCP tools via stdio (default) or SSE transport. Tools are read from the auto-discovery mechanism in `agent/src/tools/` — no manual registration needed.
 
-`pyproject.toml` maps `package-dir = {"" = "agent"}` — **`agent/` is the Python package root**. Inside it, `src/`, `backtest/`, and `cli/` are top-level packages. The CLI entry points are `vibe-trading` → `cli:main` and `vibe-trading-mcp` → `mcp_server:main`.
+**Adding a new MCP tool**:
+1. Create a file in `agent/src/tools/` with a class extending `BaseTool`
+2. Set a non-empty `name`, implement `execute(**kwargs) -> str` (return JSON)
+3. Optional: implement `check_available() -> False` to silently skip tools with missing deps
+4. Restart the MCP server for the new tool to take effect
 
-### Agent Loop (`agent/src/agent/loop.py`)
+### Skills System (`agent/src/skills/`)
 
-ReAct loop with 5-layer context compression (microcompact, context_collapse, auto_compact, compact tool, iterative update). Estimates tokens at ~4 chars/token. Batches consecutive read-only tools for parallel execution via threads. Shell tools (`bash`, `background_run`) are gated by `include_shell_tools` — disabled in networked server entry points. The loop emits heartbeats (3s default) and per-tool progress events for live UI feedback.
+76+ bundled financial analysis skills. Each skill is a directory under `agent/src/skills/<name>/` containing at minimum a `SKILL.md` with frontmatter (name, description, category).
+
+**Loading mechanism** (progressive disclosure): the system prompt injects only one-line summaries (`get_descriptions()`), and full documentation is loaded on demand by the `load_skill` tool (`get_content()`). The loader lives in `agent/src/agent/skills.py` (`SkillsLoader` class).
+
+**Converting a V-T skill to a Claude Code skill**:
+1. Copy `agent/src/skills/<name>/SKILL.md` to `.claude/skills/vt-<name>/SKILL.md`
+2. Replace `load_skill("xxx")` references with cross-skill links (`See the **vt-xxx** skill guide`)
+3. Inject the available MCP tool list at the top (HTML comment — visible to Claude, hidden from user)
 
 ### Tool Auto-Discovery (`agent/src/tools/__init__.py`)
 
-**No manual registration.** Tools are discovered by scanning `BaseTool.__subclasses__()`. To add a tool: create a file in `agent/src/tools/` with a class extending `BaseTool`, give it a non-empty `name`, implement `execute(**kwargs) -> str` (returns JSON). Missing deps are handled via `check_available() -> False` — the tool is silently skipped.
+**No manual registration.** Tools are discovered by scanning `BaseTool.__subclasses__()`. `build_registry()` wires local tools first, then optionally appends MCP tools from `AgentConfig.mcp_servers`. Shell tools, goal tools, and swarm tools receive special constructor injection (persistent memory, session_id, event_callbacks). Live-broker MCP channels route through the `trading_*` connector surface, not raw `mcp_<broker>_*` wrappers.
 
-`build_registry()` wires local tools first, then optionally appends MCP tools from `AgentConfig.mcp_servers`. Shell tools, goal tools, and swarm tools receive special constructor injection (persistent memory, session_id, event_callbacks). Live-broker MCP channels route through the `trading_*` connector surface, not raw `mcp_<broker>_*` wrappers.
+### Alpha Zoo / Factors (`agent/src/factors/`)
+
+452 pre-built cross-sectional alphas across 4 zoos under `zoo/`:
+- `alpha101/` — Kakushadze 101 Formulaic Alphas
+- `gtja191/` — Guotai Junan 2014 short-horizon factors
+- `qlib158/` — Microsoft Qlib (Apache-2.0 attributed)
+- `academic/` — Fama-French 5 + Carhart price-based proxies
+
+**Architecture**: `registry.py` AST-scans zoo modules to extract `__alpha_meta__` dicts (Pydantic-validated) without importing code. Each alpha file defines `__alpha_meta__` (id, theme, formula_latex, columns_required, universe, frequency, etc.) and a pure `compute(panel) -> DataFrame` function. **Purity gate** (`test_alpha_purity.py`) AST-scans for forbidden imports — only `pandas`, `numpy`, `scipy.*`, and `src.factors.base` are allowed. **Lookahead gate** (`test_lookahead.py`) verifies no forward leakage. `bench_runner.py` evaluates zoos via IC/IR; `compare_runner.py` does head-to-head comparisons with subset filtering.
 
 ### Backtest System (`agent/backtest/`)
 
-- **`runner.py`**: Fixed entry point that reads `config.json` from a run directory, resolves the loader (by source/market), imports the signal engine, and runs the backtest engine.
-- **`loaders/`**: DataLoader Protocol (`base.py`) with 7 sources and auto-fallback chains (`registry.py`). Retry/budget helpers (`check_budget`, `retry_with_budget`) are the canonical pattern for flaky external APIs.
-- **`engines/`**: 7 asset-class engines + `CompositeEngine` (cross-market with shared capital pool) + options portfolio engine. Market detection lives in `engines/_market_hooks.py`, shared between `runner.py` and composite.
+- **`runner.py`**: Entry point that reads `config.json` from a run directory, resolves the loader, imports the signal engine, and runs the backtest.
+- **`loaders/`**: DataLoader Protocol with 7 sources (tushare, yfinance, okx, ccxt, akshare, mootdx, futu) and auto-fallback chains.
+- **`engines/`**: 7 asset-class engines + `CompositeEngine` (cross-market with shared capital pool) + options portfolio engine. Market detection lives in `engines/_market_hooks.py`.
+- **`optimizers/`**: 4 portfolio optimizers (mean_variance, risk_parity, equal_volatility, max_diversification).
 - Config validation uses Pydantic (`BacktestConfigSchema`). The `--interval` flag supports `1m`/`5m`/`15m`/`30m`/`1H`/`4H`/`1D`.
 
-### Swarm (`agent/src/swarm/`)
+### Trading Connectors (`agent/src/trading/connectors/`)
 
-DAG execution engine. 29 presets defined as YAML in `presets/`. `runtime.py` orchestrates workers, each with a filtered tool registry (`build_swarm_registry`). Status reconciles from live task files (crash recovery). `retry_run` relaunches failed/stale runs. Workers can call operator-configured external MCP tools via `mcp_<server>_<tool>` naming.
+10 broker connectors: ibkr, robinhood, alpaca, binance, okx, futu, tiger, longbridge, dhan, shoonya. Connector-first design: users select a profile, and all `trading_*` tools route through it. Paper/live is a structural per-broker attribute (account-id format, host, demo flag, trade environment). Brokers without a runtime paper/live discriminator (Longbridge, Dhan, Shoonya) are capped at paper + read-only.
 
 ### Live Trading Safety (`agent/src/live/`)
 
-All broker order paths pass through: mandate (symbol universe, size, exposure, leverage, daily cap), kill switch (filesystem, instant halt), pre-trade order guard (fail-closed), and audit ledger. Paper/live is a structural per-broker guard (account-id format, host, demo flag, trade environment). Connectors without a runtime paper/live discriminator are capped at paper + read-only.
+All broker order paths pass through: mandate (symbol universe, size, exposure, leverage, daily cap) → kill switch (filesystem, instant halt) → pre-trade order guard (fail-closed) → audit ledger. The mandate is read-only at the agent loop — no write path reachable from a tool. The **runtime** subsystem (`live/runtime/`) provides a persistent autonomous scheduler with a durable crash-safe job store, runner liveness monitoring, trade reconciliation, preemptive halt, and position flattening.
+
+### Swarm (`agent/src/swarm/`)
+
+DAG execution engine with YAML-defined presets. `runtime.py` orchestrates workers, each with a filtered tool registry. Status reconciles from live task files (crash recovery). **Not recommended in the Claude Code integration** — use `dispatching-parallel-agents` + `Agent` tool instead.
+
+### Other Packages
+
+- **`agent/src/hypotheses/`** — Durable research hypothesis registry with status tracking and backtest linking.
+- **`agent/src/memory/`** — Persistent cross-session memory with FTS search and CJK-safe slugs.
+- **`agent/src/shadow_account/`** — Extracts trading patterns from user broker statements; generates PDF reports via Jinja2 + WeasyPrint.
+- **`agent/src/goal/`** — Research goal runtime: persistent objectives with criteria, evidence, claims, and completion policy.
+- **`agent/src/security/`** — Path containment, secret redaction, and sandbox enforcement.
+
+### API Server (`agent/api_server.py`)
+
+FastAPI server (~3100 LOC) serving the React frontend as static files plus REST API routes: agent chat, runs, sessions, alpha bench/compare, swarm, settings, correlation, uploads, goals, hypotheses. SPA deep-link support for `/runs/{id}` and `/correlation`. SSE event streaming for real-time agent progress.
 
 ### Frontend (`frontend/`)
 
@@ -69,14 +167,25 @@ React 19 + Vite + TypeScript + Tailwind CSS. Zustand for state management (`stor
 
 ### Session Layer (`agent/src/session/`)
 
-Multi-turn chat stored as JSONL files (`session_id/messages.jsonl`) with `flush + fsync` on each append for crash safety. FTS5-backed cross-session search (`search.py`). SSE event streaming via `sse-starlette`. Corrupted JSONL lines are skipped with first-200-char logging.
+Multi-turn chat stored as JSONL files with `flush + fsync` on each append for crash safety. FTS5-backed cross-session search. SSE event streaming via `sse-starlette`. Corrupted JSONL lines are skipped with first-200-char logging.
 
-### MCP Dual Role
+### CLI (`agent/cli/`)
 
-1. **Server**: `vibe-trading-mcp` exposes 36+ tools via stdio (default) or SSE. Tools are read from the same auto-discovered registry.
-2. **Client**: The agent can call external MCP tools configured in `~/.vibe-trading/agent.json`. Tools appear as `mcp_<server>_<tool>`. Supports stdio, SSE, and streamable HTTP transports.
+Interactive REPL with Rich-based rendering, slash-command router, `prompt_toolkit` input (with readline fallback), live status bar, and progress indicators. Subcommands: `chat`, `alpha bench/compare`, `connector`, `swarm`, `goal`, `hypothesis`, `memory`, `provider login`, `serve`.
 
-### Key Environment Variables
+### LLM Provider System (`agent/src/providers/`)
+
+Multi-provider support registered in `llm_providers.json`. Each provider entry defines: name, label, `api_key_env` / `base_url_env`, `default_model`, `default_base_url`, and optional `auth_type` (api_key or oauth). The `llm.py` module wraps langchain, handling provider-specific quirks (e.g., Gemini `thought_signature` round-tripping for multi-turn tool calls). OpenAI Codex uses ChatGPT OAuth via `vibe-trading provider login openai-codex`.
+
+### Config System (`agent/src/config/`)
+
+Pydantic-based schema for `~/.vibe-trading/agent.json`. Validates MCP server entries, detects live-broker URLs by host suffix (not config key) to prevent bypass, and enforces wildcard-tool rejection for live brokers.
+
+### Docker
+
+Multi-stage build: Node 20 frontend build → Python 3.11-slim runtime. Runs as non-root user `vibe` with healthcheck on `/health`. Port 8899 (bound to loopback by default). Two named volumes (`vibe-runs`, `vibe-sessions`). `VIBE_TRADING_TRUST_DOCKER_LOOPBACK=1` skips `API_AUTH_KEY` for Docker Desktop host-gateway connections.
+
+## Key Environment Variables
 
 | Variable | Role |
 |----------|------|
@@ -85,18 +194,21 @@ Multi-turn chat stored as JSONL files (`session_id/messages.jsonl`) with `flush 
 | `LANGCHAIN_MODEL_NAME` | Model name |
 | `API_AUTH_KEY` | Required for non-loopback API access |
 | `VIBE_TRADING_ENABLE_SHELL_TOOLS` | Opt-in for shell tools in remote deployments |
-| `VIBE_TRADING_ALLOWED_FILE_ROOTS` | Extra paths for document imports |
 | `VIBE_TRADING_DATA_CACHE` | Opt-in local data caching (`~/.vibe-trading/cache`) |
 | `TUSHARE_TOKEN` | Optional A-share data token (falls back to mootdx/AKShare) |
 
-### Test Organization
+## Test Organization
 
 Tests live in `agent/tests/`. `conftest.py` provides shared fixtures. Test files are named by feature (not by source module). Key markers: `@pytest.mark.unit` (fast, no network), `@pytest.mark.integration` (may need network). `test_e2e_harness_v2.py` is gated behind `VIBE_TRADING_RUN_LIVE_E2E=1` (real LLM calls).
 
-### Code Style
+## Code Style
 
-- Black for formatting, ruff for linting (E/F/W rules, 120-char lines)
-- Type annotations on public function/method signatures
-- No `Co-Authored-By:` or AI-assistant trailers in commits
-- Community commits require DCO `Signed-off-by:` trailer (`git commit -s`)
-- Alpha zoo files (`src/factors/zoo/**/*.py`) are exempt from `F401` (unused-import) — the full `base.py` surface is imported verbatim to match research formulas
+- **DCO**: Every community commit MUST carry `Signed-off-by:` trailer (`git commit -s`). No CLA required.
+- **No AI-attribution trailers**: Do not add `Co-Authored-By:` or AI-assistant attribution lines.
+- **Alpha zoo files** (`src/factors/zoo/**/*.py`) are exempt from `F401` (unused-import) — the full `base.py` surface is imported verbatim to match research formulas.
+- Type annotations on all public function/method signatures.
+- Google-style docstrings (`Args:` / `Returns:` / `Raises:`).
+- File length: prefer under 400 lines, 800 hard cap.
+- No hardcoded paths, secrets, or URLs — config via `.env`, YAML, or module-level constants.
+- Format with Black; lint with ruff (E/F/W rules, 120-char lines).
+- Do not commit secrets, `.env` files with real values, token caches, or private trading exports.

@@ -602,6 +602,269 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Alpha Zoo tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool
+def alpha_zoo(
+    action: str,
+    alpha_id: str = "",
+    zoo: str = "",
+    theme: str = "",
+    universe: str = "",
+    limit: int = 50,
+) -> str:
+    """Browse the bundled alpha zoo: list_alphas / get_alpha / health.
+
+    action=list_alphas filters by zoo/theme/universe and returns metadata for
+    each alpha. action=get_alpha returns one alpha's metadata (no source body).
+    action=health reports registry load status (loaded / failed / errors).
+
+    Args:
+        action: Which registry operation — list_alphas, get_alpha, or health.
+        alpha_id: Required when action=get_alpha (e.g. 'gtja191_1').
+        zoo: Optional zoo filter for list_alphas (e.g. gtja191, alpha101).
+        theme: Optional theme filter (momentum, reversal, volume, ...).
+        universe: Optional universe filter (equity_us, equity_cn, crypto, ...).
+        limit: Cap on returned items (default 50, max 500).
+    """
+    registry = _get_registry()
+    params: dict[str, Any] = {"action": action}
+    if alpha_id:
+        params["alpha_id"] = alpha_id
+    if zoo:
+        params["zoo"] = zoo
+    if theme:
+        params["theme"] = theme
+    if universe:
+        params["universe"] = universe
+    params["limit"] = limit
+    return registry.execute("alpha_zoo", params)
+
+
+@mcp.tool
+def alpha_bench(
+    universe: str,
+    period: str,
+    alpha_id: str = "",
+    zoo: str = "",
+    top: int = 20,
+    output_dir: str = "",
+) -> str:
+    """Bench a single alpha or a whole zoo on a universe and emit an HTML IC report.
+
+    Computes IC mean/std/IR/positive-ratio per alpha and writes an HTML report
+    to the output directory. Returns aggregate stats only — no per-stock
+    per-date payloads.
+
+    Args:
+        universe: csi300 | sp500 | btc-usdt.
+        period: YYYY-YYYY or YYYY-MM-DD/YYYY-MM-DD.
+        alpha_id: Bench a single alpha (mutually exclusive with zoo).
+        zoo: Bench every alpha in a zoo (mutually exclusive with alpha_id).
+        top: Report the top-N alphas ranked by IR (default 20).
+        output_dir: Where to write the HTML report; default ~/.vibe-trading/reports/.
+    """
+    registry = _get_registry()
+    params: dict[str, Any] = {"universe": universe, "period": period, "top": top}
+    if alpha_id:
+        params["alpha_id"] = alpha_id
+    if zoo:
+        params["zoo"] = zoo
+    if output_dir:
+        params["output_dir"] = output_dir
+    return registry.execute("alpha_bench", params)
+
+
+@mcp.tool
+def alpha_compare(
+    alpha_ids: list[str],
+    universe: str,
+    period: str,
+    sort: str = "ir",
+) -> str:
+    """Compare >= 2 named Alpha Zoo alphas head-to-head and rank by IC metric.
+
+    Benches only the named alphas — not the whole zoo — then ranks them by
+    IC mean/std, IR, IC-positive ratio, and sample count. Returns the ranking
+    + a winner; no per-stock per-date payloads.
+
+    Args:
+        alpha_ids: Alpha ids to compare, e.g. ['alpha101_1', 'gtja191_5'].
+            Minimum 2 required. Accepts comma/space-separated string too.
+        universe: csi300 | sp500 | btc-usdt.
+        period: YYYY-YYYY or YYYY-MM-DD/YYYY-MM-DD.
+        sort: Ranking metric — ir, ic_mean, ic_positive_ratio, or ic_count (default ir).
+    """
+    registry = _get_registry()
+    return registry.execute(
+        "alpha_compare",
+        {
+            "alpha_ids": alpha_ids,
+            "universe": universe,
+            "period": period,
+            "sort": sort,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Hypothesis Registry tools
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool
+def create_hypothesis(
+    title: str,
+    thesis: str,
+    status: str = "exploring",
+    universe: str = "",
+    signal_definition: str = "",
+    data_sources: list[str] | None = None,
+    skills: list[str] | None = None,
+    invalidation_notes: str = "",
+) -> str:
+    """Create a durable research hypothesis in the local registry.
+
+    Research-only: does not place trades or call live trading APIs.
+
+    Args:
+        title: Short hypothesis title (required).
+        thesis: Research thesis/rationale (required).
+        status: Initial lifecycle status, default exploring.
+            One of: exploring, testing, validated, rejected, monitoring.
+        universe: Target universe or market.
+        signal_definition: Signal logic description.
+        data_sources: Data sources used or expected.
+        skills: Relevant Vibe-Trading skills.
+        invalidation_notes: Invalidation notes.
+    """
+    registry = _get_registry()
+    params: dict[str, Any] = {
+        "title": title,
+        "thesis": thesis,
+        "status": status,
+        "universe": universe,
+        "signal_definition": signal_definition,
+        "invalidation_notes": invalidation_notes,
+    }
+    if data_sources:
+        params["data_sources"] = data_sources
+    if skills:
+        params["skills"] = skills
+    return registry.execute("create_hypothesis", params)
+
+
+@mcp.tool
+def update_hypothesis(
+    hypothesis_id: str,
+    title: str = "",
+    thesis: str = "",
+    status: str = "",
+    universe: str = "",
+    signal_definition: str = "",
+    data_sources: list[str] | None = None,
+    skills: list[str] | None = None,
+    invalidation_notes: str = "",
+) -> str:
+    """Update a hypothesis, including lifecycle status and invalidation notes.
+
+    Only provided fields are updated; omitted fields are left unchanged.
+    The hypothesis_id is required.
+
+    Args:
+        hypothesis_id: Hypothesis identifier (required).
+        title: New short title.
+        thesis: New research thesis.
+        status: New lifecycle status.
+            One of: exploring, testing, validated, rejected, monitoring.
+        universe: New target universe.
+        signal_definition: New signal logic.
+        data_sources: Data sources (replaces existing list).
+        skills: Relevant skills (replaces existing list).
+        invalidation_notes: New invalidation notes.
+    """
+    registry = _get_registry()
+    params: dict[str, Any] = {"hypothesis_id": hypothesis_id}
+    if title:
+        params["title"] = title
+    if thesis:
+        params["thesis"] = thesis
+    if status:
+        params["status"] = status
+    if universe:
+        params["universe"] = universe
+    if signal_definition:
+        params["signal_definition"] = signal_definition
+    if data_sources:
+        params["data_sources"] = data_sources
+    if skills:
+        params["skills"] = skills
+    if invalidation_notes:
+        params["invalidation_notes"] = invalidation_notes
+    return registry.execute("update_hypothesis", params)
+
+
+@mcp.tool
+def link_backtest(
+    hypothesis_id: str,
+    run_card_path: str = "",
+    backtest_run_dir: str = "",
+    metrics: dict[str, Any] | None = None,
+    notes: str = "",
+) -> str:
+    """Attach a run card or backtest run directory to a research hypothesis.
+
+    Args:
+        hypothesis_id: Hypothesis identifier (required).
+        run_card_path: Path to run_card.json.
+        backtest_run_dir: Backtest run directory path.
+        metrics: Optional metrics summary dict.
+        notes: Optional link note.
+    """
+    registry = _get_registry()
+    params: dict[str, Any] = {"hypothesis_id": hypothesis_id}
+    if run_card_path:
+        params["run_card_path"] = run_card_path
+    if backtest_run_dir:
+        params["backtest_run_dir"] = backtest_run_dir
+    if metrics:
+        params["metrics"] = metrics
+    if notes:
+        params["notes"] = notes
+    return registry.execute("link_backtest", params)
+
+
+@mcp.tool
+def search_hypotheses(
+    query: str = "",
+    status: str = "",
+    limit: int = 10,
+) -> str:
+    """Search hypotheses by text query and/or lifecycle status.
+
+    Returns matching hypothesis records with their ids, titles, statuses,
+    and linked backtest artifacts.
+
+    Args:
+        query: Text query to match against hypothesis content.
+        status: Optional status filter.
+            One of: exploring, testing, validated, rejected, monitoring.
+        limit: Max results to return (default 10).
+    """
+    registry = _get_registry()
+    return registry.execute(
+        "search_hypotheses",
+        {
+            "query": query,
+            "status": status,
+            "limit": limit,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # File I/O tools (sandboxed to workspace)
 # ---------------------------------------------------------------------------
 
