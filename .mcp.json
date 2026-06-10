@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "vibe-trading": {
+      "command": "/home/zly/Vibe-Trading/.venv/bin/vibe-trading-mcp"
+    }
+  }
+}

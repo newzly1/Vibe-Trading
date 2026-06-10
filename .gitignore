@@ -19,6 +19,7 @@ agent/.env
 
 .claude/*
 !.claude/hooks.json
+!.claude/skills/
 CLAUDE.md
 .vscode/
 learn-claude-code-main/
