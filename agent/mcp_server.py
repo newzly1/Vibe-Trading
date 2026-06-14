@@ -64,11 +64,23 @@ _skills_loader = None
 _registry = None
 _goal_store = None
 _include_shell_tools = True
+_enable_swarm = False  # Swarm is DEPRECATED in Claude Code integration — opt-in only
 
 
 def _env_shell_tools_enabled() -> bool:
     """Return whether shell tools were explicitly enabled for network MCP."""
     return os.getenv("VIBE_TRADING_ENABLE_SHELL_TOOLS", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_swarm_enabled() -> bool:
+    """Swarm is DEPRECATED in the Claude Code integration.
+
+    The 28 YAML presets are being ported to Claude Code native skills + workflows
+    (see CLAUDE.md § Swarm Replacement). This gate prevents accidental use of the
+    deprecated V-T ReAct agent loop. Opt in with VIBE_TRADING_ENABLE_SWARM=1 only
+    if you need backward compatibility with the old swarm system.
+    """
+    return os.getenv("VIBE_TRADING_ENABLE_SWARM", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _get_skills_loader():
@@ -1139,7 +1151,24 @@ def list_swarm_presets() -> str:
     Each preset defines a team of specialized agents (e.g. investment committee,
     quant desk, risk committee) that collaborate on complex research tasks.
     Returns preset names, descriptions, agent counts, and required variables.
+
+    .. deprecated::
+        Swarm presets have been ported to Claude Code native skills + workflows.
+        See ``vt-swarm-*`` skills and ``.claude/workflows/`` for the recommended
+        replacement. This tool requires ``VIBE_TRADING_ENABLE_SWARM=1`` to use.
     """
+    if not _enable_swarm:
+        return json.dumps({
+            "status": "deprecated",
+            "error": (
+                "Swarm is DEPRECATED in the Claude Code integration. "
+                "The 28 YAML presets have been ported to native Claude Code "
+                "skills (vt-swarm-*) + workflows (.claude/workflows/). "
+                "See CLAUDE.md § Swarm Replacement for usage. "
+                "Set VIBE_TRADING_ENABLE_SWARM=1 to bypass this gate if you "
+                "absolutely need the legacy swarm system."
+            ),
+        }, ensure_ascii=False)
     from src.swarm.presets import list_presets
 
     presets = list_presets()
@@ -1168,6 +1197,11 @@ async def run_swarm(
     tool return early with the current ``run_id`` — call ``get_run_result``
     afterwards to fetch the final report.
 
+    .. deprecated::
+        Swarm has been replaced by Claude Code native skills + workflows.
+        See ``vt-swarm-*`` skills and ``.claude/workflows/``.
+        This tool requires ``VIBE_TRADING_ENABLE_SWARM=1``.
+
     Args:
         preset_name: Swarm preset name (e.g. 'investment_committee', 'quant_strategy_desk').
         variables: Required variables for the preset (e.g. {"target": "AAPL.US", "market": "US"}).
@@ -1177,6 +1211,18 @@ async def run_swarm(
         start_only: If True, kick off the run and return immediately with
             ``run_id`` + current status. Ignores ``wait_seconds``.
     """
+    if not _enable_swarm:
+        return json.dumps({
+            "status": "deprecated",
+            "error": (
+                "Swarm is DEPRECATED in the Claude Code integration. "
+                "The 28 YAML presets have been ported to native Claude Code "
+                "skills (vt-swarm-*) + workflows (.claude/workflows/). "
+                "See CLAUDE.md § Swarm Replacement for usage. "
+                "Set VIBE_TRADING_ENABLE_SWARM=1 to bypass this gate if you "
+                "absolutely need the legacy swarm system."
+            ),
+        }, ensure_ascii=False)
     import asyncio
     import time
     from src.config import load_swarm_agent_config
@@ -1710,7 +1756,7 @@ def scan_shadow_signals(
 
 def main():
     """Entry point for `vibe-trading-mcp` CLI command."""
-    global _include_shell_tools, _registry
+    global _include_shell_tools, _enable_swarm, _registry
     import argparse
 
     parser = argparse.ArgumentParser(description="Vibe-Trading MCP Server")
@@ -1718,6 +1764,7 @@ def main():
     parser.add_argument("--port", type=int, default=8900, help="SSE port (only used with --transport sse)")
     args = parser.parse_args()
     _include_shell_tools = True if args.transport == "stdio" else _env_shell_tools_enabled()
+    _enable_swarm = _env_swarm_enabled()
     _registry = None
     _get_registry()  # pre-warm: avoids deadlock when first tools/call lazy-inits inside FastMCP worker thread
 

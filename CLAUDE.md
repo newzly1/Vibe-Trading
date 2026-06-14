@@ -12,7 +12,7 @@ Vibe-Trading's core financial analysis capabilities have been ported to Claude C
 |------------|---------|---------|
 | Domain knowledge | 77 `.claude/skills/vt-*` skills | Formulas, parameters, methodology reference (auto-discovered, loaded on demand) |
 | Data + computation | MCP tools (43, via `.mcp.json`) | Market data, backtesting, factor analysis, Alpha Zoo, options pricing, hypothesis registry, etc. |
-| Parallel analysis | Claude Code `Agent` tool + `dispatching-parallel-agents` skill | Replaces V-T's Swarm multi-agent framework |
+| Parallel analysis | `vt-swarm-*` skills + `.claude/workflows/` + `Agent` tool | Replaces V-T's Swarm multi-agent framework (3 presets ported, 25 remaining) |
 | Code execution | `Bash` tool | Run Python scripts for custom computation |
 
 ### MCP Tools Quick Reference
@@ -44,12 +44,46 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 43 tools:
 ### Key Usage Patterns
 
 1. **Fetch → analyze → backtest** pipeline: call MCP tools directly in sequence; no agent loop needed.
-2. **Parallel analysis replacing Swarm**: use the `dispatching-parallel-agents` skill + `Agent` tool to spawn multiple analysis agents, then synthesize results. Do NOT use `run_swarm` (it still goes through V-T's ReAct loop, inheriting its issues).
+2. **Swarm replacement (Skills + Workflows)**: V-T's 28 Swarm presets are being ported as `vt-swarm-*` skills (knowledge) + `.claude/workflows/*.js` (deterministic orchestration). 3 presets ported so far — see [Swarm Replacement](#swarm-replacement-skills--workflows) below. Do NOT use `run_swarm`.
 3. **Skill guidance + MCP execution**: consult the relevant vt-* skill for methodology first, then execute computation via MCP tools.
+4. **Data first, always**: Before any analysis, call `get_market_data` with explicit `source` (A-shares: `source="akshare"`). Never substitute WebSearch for real market data — WebSearch is for qualitative context only.
+
+### Swarm Replacement: Skills + Workflows
+
+V-T's 28 YAML swarm presets are being ported to a two-layer architecture: **Skills** (knowledge/roles) + **Workflows** (deterministic DAG orchestration). This gives you the preset knowledge without V-T's ReAct agent loop.
+
+**Ported presets (3/28)**:
+
+| Preset | Skill | Workflow | Use Case |
+|--------|-------|----------|----------|
+| `investment_committee` | `vt-swarm-investment-committee` | `/workflow investment-committee` | Bull/bear debate → risk review → PM decision |
+| `equity_research_team` | `vt-swarm-equity-research-team` | `/workflow equity-research-team` | Macro → sector → stock → aggregated report |
+| `quant_strategy_desk` | `vt-swarm-quant-strategy-desk` | `/workflow quant-strategy-desk` | Screening + factor mining → backtest → risk audit |
+
+**Usage pattern**:
+
+```
+# Option A: Use the workflow (recommended — deterministic DAG)
+/workflow investment-committee target="300274.SZ" market="A-shares"
+
+# Option B: Manual Agent dispatch (flexible, follow skill guidance)
+Skill("vt-swarm-investment-committee")  # load the recipe
+Agent("bull_advocate", prompt="...")    # dispatch bull
+Agent("bear_advocate", prompt="...")    # dispatch bear (parallel)
+# ... then risk_officer → portfolio_manager sequentially
+```
+
+**Why this replaces `run_swarm`**:
+- Workflows use `parallel()` → `agent()` for deterministic DAG execution (no LLM guessing parallelism)
+- Skills provide the role definitions, output templates, and tool assignments from YAML presets
+- All agents are native Claude Code sub-agents with full MCP tool access
+- No V-T ReAct loop, no Python ThreadPoolExecutor, no swarm crash recovery
+
+**Adding more presets**: See the 3 existing skills + workflows as templates. Each YAML preset maps to one `SKILL.md` (role definitions, output specs) + one `.js` workflow (DAG structure in `parallel()`/`pipeline()`).
 
 ### Known Limitations
 
-- `run_swarm` is not recommended — it still uses V-T's ReAct agent loop.
+- `run_swarm` is **deprecated** — use `vt-swarm-*` skills + workflows instead. The MCP tool still exists for backward compatibility but goes through V-T's ReAct agent loop.
 - A-share data: `get_market_data` with `source="auto"` may route to an unsupported source; explicitly specify `source="akshare"` or `source="tushare"`.
 - `backtest` requires a pre-prepared directory with `config.json` + `code/signal_engine.py`.
 - The 77 skills are knowledge documents, not executable code.
