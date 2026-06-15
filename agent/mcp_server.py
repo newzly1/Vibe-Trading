@@ -42,7 +42,24 @@ AGENT_DIR = Path(__file__).resolve().parent
 if str(AGENT_DIR) not in sys.path:
     sys.path.insert(0, str(AGENT_DIR))
 
+# Load .env from project root
+try:
+    from dotenv import load_dotenv
+    _ENV_FILE = AGENT_DIR.parent / ".env"
+    if _ENV_FILE.exists():
+        load_dotenv(_ENV_FILE)
+except Exception:
+    pass
+
 from fastmcp import Context, FastMCP
+from src.events_data import fetch_events_json
+from src.financial_data import (
+    fetch_daily_basic_json,
+    fetch_earnings_forecast_json,
+    fetch_financial_statements_json,
+    fetch_margin_data_json,
+    fetch_money_flow_json,
+)
 from src.market_data import (
     DEFAULT_MAX_ROWS,
     cap_rows,
@@ -1372,6 +1389,165 @@ def get_market_data(
         interval=interval,
         max_rows=max_rows,
         loader_resolver=_get_loader,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Financial data tools (fundamentals, statements, money flow, margin, forecast)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool
+def get_fundamentals(
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+    fields: list[str] | None = None,
+) -> str:
+    """获取 A 股日频基本面估值数据（PE/PB/ROE/市值等），数据来源 Tushare daily_basic。
+
+    返回每只股票每个交易日的 pe_ttm / pb / roe / total_mv / circ_mv 等字段。
+    可用于单股票历史估值分位分析、行业折溢价比较。
+
+    Args:
+        codes: 股票代码列表，如 ["000636.SZ", "600000.SH"]。
+        start_date: 起始日期 (YYYY-MM-DD)。
+        end_date: 结束日期 (YYYY-MM-DD)。
+        fields: 可选，指定返回字段，如 ["pe_ttm", "pb", "roe"]。None 返回常用字段。
+    """
+    return fetch_daily_basic_json(
+        codes=codes,
+        start_date=start_date,
+        end_date=end_date,
+        fields=fields,
+    )
+
+
+@mcp.tool
+def get_financial_statements(
+    codes: list[str],
+    table: str,
+    start_date: str,
+    end_date: str,
+    fields: list[str] | None = None,
+) -> str:
+    """获取 A 股财务报表数据（利润表/资产负债表/现金流量表/财务指标），数据来源 Tushare。
+
+    复用已有的 TushareFundamentalProvider，具备 Point-in-Time 防前视逻辑：
+    只返回公告日 ≤ 查询日的数据，确保回测无未来信息泄露。
+
+    Args:
+        codes: 股票代码列表，如 ["000636.SZ"]。
+        table: 报表类型 — "income" (利润表), "balancesheet" (资产负债表),
+            "cashflow" (现金流量表), "fina_indicator" (财务指标)。
+        start_date: 起始日期 (YYYY-MM-DD)。
+        end_date: 截止日期 (YYYY-MM-DD)，作为 PIT as_of 边界。
+        fields: 可选，指定返回列。None 返回全部。
+    """
+    return fetch_financial_statements_json(
+        codes=codes,
+        table=table,
+        start_date=start_date,
+        end_date=end_date,
+        fields=fields,
+    )
+
+
+@mcp.tool
+def get_money_flow(
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+) -> str:
+    """获取 A 股个股资金流向数据（北向资金/主力资金），数据来源 Tushare moneyflow。
+
+    返回每日小单/中单/大单/超大单的买入和卖出量，用于分析主力资金动向。
+
+    Args:
+        codes: 股票代码列表，如 ["000636.SZ"]。
+        start_date: 起始日期 (YYYY-MM-DD)。
+        end_date: 结束日期 (YYYY-MM-DD)。
+    """
+    return fetch_money_flow_json(
+        codes=codes,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@mcp.tool
+def get_margin_data(
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+) -> str:
+    """获取 A 股融资融券数据，数据来源 Tushare margin_detail。
+
+    返回每日融资余额(rzye)、融券余额(rqye)、融资买入额(rzmre)等字段，
+    用于判断市场杠杆情绪和多空力量对比。
+
+    Args:
+        codes: 股票代码列表，如 ["000636.SZ"]。
+        start_date: 起始日期 (YYYY-MM-DD)。
+        end_date: 结束日期 (YYYY-MM-DD)。
+    """
+    return fetch_margin_data_json(
+        codes=codes,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@mcp.tool
+def get_earnings_forecast(
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+) -> str:
+    """获取 A 股盈利预测数据（分析师一致预期），数据来源 Tushare forecast。
+
+    返回分析师对净利润、营收等的预测值和增长率，可用于 SUE/PEAD 策略。
+
+    Args:
+        codes: 股票代码列表，如 ["000636.SZ"]。
+        start_date: 起始日期 (YYYY-MM-DD)，按 ann_date 筛选。
+        end_date: 结束日期 (YYYY-MM-DD)，按 ann_date 筛选。
+    """
+    return fetch_earnings_forecast_json(
+        codes=codes,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+@mcp.tool
+def get_events(
+    codes: list[str],
+    start_date: str,
+    end_date: str,
+    feeds: list[str] | None = None,
+) -> str:
+    """获取结构化新闻事件及情绪评分，数据来源自建 RSSHub 实例。
+
+    封装已有的 RSSHubEventProvider（567行完整实现），具备：
+    - Point-in-Time 防前视：收盘后发布的新闻滚到下一个交易日
+    - 词典情绪评分：基于正/负面词频的 [-1.0, 1.0] 打分
+    - 事件类型分类 + 来源追溯
+
+    前置条件：需要部署 RSSHub 实例并在 .env 中配置 RSSHUB_BASE_URL。
+    部署命令：docker run -d --name rsshub -p 1200:1200 diygod/rsshub
+
+    Args:
+        codes: 股票代码列表，如 ["000636.SZ"]。
+        start_date: 起始日期 (YYYY-MM-DD)。
+        end_date: 结束日期 (YYYY-MM-DD)，作为 PIT as_of 边界。
+        feeds: 可选，RSS 源名称列表。None 查询所有已注册源。
+    """
+    return fetch_events_json(
+        codes=codes,
+        start_date=start_date,
+        end_date=end_date,
+        feeds=feeds,
     )
 
 
