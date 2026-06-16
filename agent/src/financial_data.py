@@ -94,6 +94,7 @@ def fetch_daily_basic_json(
 
     results: dict[str, list[dict[str, Any]]] = {}
     unresolved: list[str] = []
+    unresolved_errors: dict[str, str] = {}
 
     for code in codes:
         try:
@@ -106,10 +107,12 @@ def fetch_daily_basic_json(
         except Exception as exc:
             logger.warning("daily_basic for %s failed: %s", code, exc)
             unresolved.append(code)
+            unresolved_errors[code] = str(exc)
             results[code] = []
 
     if unresolved:
         results["_unresolved"] = unresolved
+        results["_unresolved_errors"] = unresolved_errors
 
     return _safe_to_json(results)
 
@@ -220,6 +223,7 @@ def fetch_money_flow_json(
 
     results: dict[str, list[dict[str, Any]]] = {}
     unresolved: list[str] = []
+    unresolved_errors: dict[str, str] = {}
 
     for code in codes:
         try:
@@ -232,10 +236,12 @@ def fetch_money_flow_json(
         except Exception as exc:
             logger.warning("moneyflow for %s failed: %s", code, exc)
             unresolved.append(code)
+            unresolved_errors[code] = str(exc)
             results[code] = []
 
     if unresolved:
         results["_unresolved"] = unresolved
+        results["_unresolved_errors"] = unresolved_errors
 
     return _safe_to_json(results)
 
@@ -271,6 +277,7 @@ def fetch_margin_data_json(
 
     results: dict[str, list[dict[str, Any]]] = {}
     unresolved: list[str] = []
+    unresolved_errors: dict[str, str] = {}
 
     for code in codes:
         try:
@@ -283,10 +290,12 @@ def fetch_margin_data_json(
         except Exception as exc:
             logger.warning("margin_detail for %s failed: %s", code, exc)
             unresolved.append(code)
+            unresolved_errors[code] = str(exc)
             results[code] = []
 
     if unresolved:
         results["_unresolved"] = unresolved
+        results["_unresolved_errors"] = unresolved_errors
 
     return _safe_to_json(results)
 
@@ -323,6 +332,7 @@ def fetch_earnings_forecast_json(
 
     results: dict[str, list[dict[str, Any]]] = {}
     unresolved: list[str] = []
+    unresolved_errors: dict[str, str] = {}
 
     for code in codes:
         try:
@@ -337,9 +347,11 @@ def fetch_earnings_forecast_json(
         except Exception as exc:
             logger.warning("forecast for %s failed: %s", code, exc)
             unresolved.append(code)
+            unresolved_errors[code] = str(exc)
             results[code] = []
 
     if unresolved:
         results["_unresolved"] = unresolved
+        results["_unresolved_errors"] = unresolved_errors
 
     return _safe_to_json(results)
