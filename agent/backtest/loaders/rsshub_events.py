@@ -179,14 +179,25 @@ def feed_specs_from_config(entries: Iterable[Mapping[str, Any]]) -> list[FeedSpe
     return specs
 
 
-#: No built-in feed catalogue: RSSHub routes change and break, so feeds are always
-#: supplied explicitly (via config ``event_feeds`` or the provider constructor).
-DEFAULT_FEEDS: tuple[FeedSpec, ...] = ()
+#: Built-in market-wide feed catalogue.  Per-symbol routes are not included
+#: here — they are too brittle across RSSHub versions.  Market-wide feeds return
+#: the same items for every requested symbol (the caller can still filter), so
+#: they serve as a reasonable out-of-the-box baseline for ``get_events``.
+DEFAULT_FEEDS: tuple[FeedSpec, ...] = (
+    FeedSpec(name="36kr_news", route_template="/36kr/news", event_type="sentiment"),
+    FeedSpec(name="caixin_latest", route_template="/caixin/latest", event_type="sentiment"),
+    FeedSpec(name="wallstreetcn_global", route_template="/wallstreetcn/news/global", event_type="macro"),
+    FeedSpec(name="jin10_latest", route_template="/jin10/latest", event_type="macro"),
+    FeedSpec(name="guancha_headline", route_template="/guancha/headline", event_type="sentiment"),
+    FeedSpec(name="cls_telegraph", route_template="/cls/telegraph/1", event_type="sentiment"),
+    FeedSpec(name="cls_subject", route_template="/cls/subject/1003", event_type="sentiment"),
+)
 
 # ── Default dependency-free lexicon scorer ───────────────────────────────────
 
 _POSITIVE_TERMS: frozenset[str] = frozenset(
     {
+        # English
         "beat",
         "beats",
         "surge",
@@ -211,6 +222,7 @@ _POSITIVE_TERMS: frozenset[str] = frozenset(
 )
 _NEGATIVE_TERMS: frozenset[str] = frozenset(
     {
+        # English
         "miss",
         "misses",
         "plunge",
@@ -235,13 +247,31 @@ _NEGATIVE_TERMS: frozenset[str] = frozenset(
     }
 )
 
+# ── Chinese sentiment terms (substring-matched, not tokenised) ────────────
+
+_CN_POSITIVE: tuple[str, ...] = (
+    "增长", "上涨", "飙升", "突破", "盈利", "利润",
+    "分红", "回购", "获批", "升级", "超预期", "创新高",
+    "利好", "扩张", "签约", "中标", "涨停", "增持",
+    "扭亏", "放量", "领涨", "反弹", "新高", "景气",
+    "回暖", "复苏", "净流入", "产能释放", "订单饱满",
+)
+_CN_NEGATIVE: tuple[str, ...] = (
+    "下跌", "暴跌", "亏损", "违约", "诉讼", "调查",
+    "退市", "警示", "处罚", "下滑", "衰退", "风险",
+    "暴雷", "爆雷", "造假", "减持", "跌停", "冻结",
+    "爆仓", "踩雷", "雷区", "崩盘", "停牌", "监管函",
+    "问询函", "立案", "暗雷", "缩水", "腰斩", "踩踏",
+)
+
 
 def default_lexicon_scorer(title: str, summary: str) -> float:
     """Score text in ``[-1, 1]`` by net positive/negative term frequency.
 
-    A deterministic, dependency-free baseline. It is intentionally simple — the
-    provider is the data layer; richer scoring (e.g. an LLM judge) is plugged in
-    via the ``scorer`` argument on :meth:`RSSHubEventProvider.query_events`.
+    A deterministic, dependency-free baseline.  English terms are matched via
+    whitespace tokenisation; Chinese terms are matched via substring search
+    against the raw (lowercased) text so that no segmenter dependency is
+    required.
 
     Args:
         title: Item headline.
@@ -250,11 +280,16 @@ def default_lexicon_scorer(title: str, summary: str) -> float:
     Returns:
         Sentiment score in ``[-1.0, 1.0]``; ``0.0`` when no terms match.
     """
+    # ── English token-level match ──────────────────────────────────────
     tokens = f"{title} {summary}".lower().replace("/", " ").split()
-    if not tokens:
-        return 0.0
     pos = sum(1 for tok in tokens if tok.strip(".,;:!?\"'()") in _POSITIVE_TERMS)
     neg = sum(1 for tok in tokens if tok.strip(".,;:!?\"'()") in _NEGATIVE_TERMS)
+
+    # ── Chinese substring match ────────────────────────────────────────
+    text = f"{title} {summary}".lower()
+    pos += sum(1 for term in _CN_POSITIVE if term in text)
+    neg += sum(1 for term in _CN_NEGATIVE if term in text)
+
     hits = pos + neg
     if hits == 0:
         return 0.0
