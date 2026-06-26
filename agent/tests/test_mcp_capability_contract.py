@@ -96,10 +96,9 @@ def _list_tool_names() -> set[str]:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(AGENT_DIR) + os.pathsep + env.get("PYTHONPATH", "")
     env["PYTHONUNBUFFERED"] = "1"
-    # Disable fastmcp version check to work around proxy issues in test environment
-    startup_script = "import fastmcp.settings; fastmcp.settings.check_for_updates='off'; from mcp_server import main; main()"
+    env["FASTMCP_CHECK_FOR_UPDATES"] = "off"
     proc = subprocess.Popen(
-        [sys.executable, "-c", startup_script],
+        [sys.executable, "-c", "from mcp_server import main; main()"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
