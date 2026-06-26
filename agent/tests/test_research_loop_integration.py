@@ -83,6 +83,8 @@ def test_native_write_then_backtest_produces_metrics() -> None:
     assert metrics_path.exists(), f"metrics.csv not produced; artifacts={result.get('artifacts')}"
 
     with metrics_path.open(encoding="utf-8") as fh:
-        row = next(csv.DictReader(fh))
-    assert "sharpe" in row, f"metrics.csv missing 'sharpe' column: {row.keys()}"
+        rows = list(csv.DictReader(fh))
+    assert rows, "metrics.csv has a header but no data rows"
+    row = rows[0]
+    assert "sharpe" in row, f"metrics.csv missing 'sharpe' column: {list(row.keys())}"
     float(row["sharpe"])  # raises ValueError if not numeric
