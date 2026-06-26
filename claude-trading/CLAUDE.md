@@ -27,7 +27,7 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
 
 **Alpha Zoo**: `alpha_zoo` (browse/list/get 452 pre-built alphas), `alpha_bench` (batch benchmark a zoo — IC mean/std/IR/positive-ratio + HTML report), `alpha_compare` (head-to-head ranking of named alphas by IC metric).
 
-**Content tools**: `read_url`, `read_document`, `web_search`, `read_file`, `write_file`.
+**Content & file I/O**: native to Claude Code — use `WebFetch` / `WebSearch` for web content and `Read` / `Write` / `Edit` for files (the MCP `read_url` / `read_document` / `web_search` / `read_file` / `write_file` wrappers were removed in the port).
 
 **Trading connections**: `trading_connections`, `trading_select_connection`, `trading_check`, `trading_account`, `trading_positions`, `trading_orders`, `trading_quote`, `trading_history`.
 
