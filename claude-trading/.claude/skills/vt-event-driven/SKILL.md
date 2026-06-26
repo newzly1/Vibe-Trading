@@ -4,17 +4,20 @@ description: Event-driven strategy based on sentiment-scored signals from news, 
 ---
 
 <!--
-Available Vibe-Trading MCP tools for this skill:
-  - get_market_data(codes, start_date, end_date, source, interval) — fetch OHLCV
-  - backtest(run_dir) — run backtest from config.json + signal_engine.py
-  - factor_analysis(codes, factor_name, start_date, end_date, ...) — factor IC/returns
-  - analyze_options(...) — options pricing & greeks
-  - pattern_recognition(run_dir) — chart pattern detection
-  - read_url(url) / read_document(path) / web_search(query) — content tools
-  - write_file(path, content) / read_file(path) — file I/O
-  - list_skills() / load_skill(name) — skill discovery
+Vibe-Trading MCP tools available to this skill (Claude Code is the harness; key tools):
+  Market data:    get_market_data
+  A-share data:   get_fundamentals, get_financial_statements, get_money_flow,
+                  get_margin_data, get_earnings_forecast, get_events
+  Backtest/anlys: backtest, factor_analysis, analyze_options, pattern_recognition
+  Alpha Zoo:      alpha_zoo, alpha_bench, alpha_compare
+  Hypotheses:     create_hypothesis, update_hypothesis, link_backtest, search_hypotheses
+  Research goals: start_research_goal, get_research_goal, add_goal_evidence, update_research_goal_status
+  Journal/shadow: analyze_trade_journal, extract_shadow_strategy, run_shadow_backtest,
+                  render_shadow_report, scan_shadow_signals
+  Trading (read-only): trading_connections, trading_select_connection, trading_check,
+                  trading_account, trading_positions, trading_orders, trading_quote, trading_history
+Native Claude Code tools (use directly, NOT an MCP tool): Read, Write, Edit, WebFetch, WebSearch, Skill.
 -->
-
 # Event-Driven Strategy
 
 ## Purpose
@@ -23,7 +26,7 @@ Uses event information such as news, announcements, and macro policy updates. Th
 
 ## Workflow
 
-1. **Data collection**: use the `read_url` tool to fetch the full text of news and announcements
+1. **Data collection**: use the `WebFetch` tool to fetch the full text of news and announcements
 2. **LLM analysis**: the LLM reads the news and scores it from `-1.0` to `1.0` with a standardized prompt (extremely bearish to extremely bullish)
 3. **Generate the event CSV**: write data in the `date,event_type,score,source,summary` schema
 4. **Signal aggregation**: `signal_engine.py` reads the event CSV, applies time decay, and combines it with the technical signal
@@ -34,11 +37,11 @@ Uses event information such as news, announcements, and macro policy updates. Th
 
 ```csv
 date,event_type,score,source,summary
-2024-01-15,earnings,0.8,read_url,Q4 revenue beat expectations by 30%
-2024-01-20,macro,-0.5,read_url,Central bank raised rates by 25bp
-2024-02-01,policy,0.3,read_url,New-energy subsidies extended
-2024-02-10,sentiment,-0.7,read_url,Bearish sentiment surged on social media
-2024-03-05,insider,0.4,read_url,CEO bought 5 million shares
+2024-01-15,earnings,0.8,WebFetch,Q4 revenue beat expectations by 30%
+2024-01-20,macro,-0.5,WebFetch,Central bank raised rates by 25bp
+2024-02-01,policy,0.3,WebFetch,New-energy subsidies extended
+2024-02-10,sentiment,-0.7,WebFetch,Bearish sentiment surged on social media
+2024-03-05,insider,0.4,WebFetch,CEO bought 5 million shares
 ```
 
 Field descriptions:
@@ -48,7 +51,7 @@ Field descriptions:
 | date | str (`YYYY-MM-DD`) | Date when the event became knowable (publication date, not occurrence date. If released after market close → use the next trading day) |
 | event_type | str | `earnings / macro / policy / sentiment / insider / technical_break` |
 | score | float | `-1.0 ~ 1.0` (standardized LLM score) |
-| source | str | Data-source tag (such as `read_url`) |
+| source | str | Data-source tag (such as `WebFetch`) |
 | summary | str | Event summary (one sentence, no commas) |
 
 ## Event Type Details
@@ -145,7 +148,7 @@ Default `alpha = 0.6`: technical signal 60%, event signal 40%.
 
 ## LLM Scoring Prompt Template
 
-After fetching news with `read_url`, use the following standardized prompt to keep scoring consistent:
+After fetching news with `WebFetch`, use the following standardized prompt to keep scoring consistent:
 
 ```
 You are a financial event analyst. Read the following news / announcement and score its impact on the stock price.
@@ -183,7 +186,7 @@ Score:
 pip install pandas numpy
 ```
 
-No additional dependencies. LLM analysis is handled by the Agent itself, and the `read_url` tool is built in.
+No additional dependencies. LLM analysis is handled by the Agent itself, and the `WebFetch` tool is built in.
 
 ## Signal Convention
 

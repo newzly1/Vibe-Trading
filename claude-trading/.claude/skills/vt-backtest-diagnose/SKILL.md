@@ -4,15 +4,19 @@ description: Diagnose failed or underperforming backtests, locate the root cause
 ---
 
 <!--
-Available Vibe-Trading MCP tools for this skill:
-  - get_market_data(codes, start_date, end_date, source, interval) — fetch OHLCV
-  - backtest(run_dir) — run backtest from config.json + signal_engine.py
-  - factor_analysis(codes, factor_name, start_date, end_date, ...) — factor IC/returns
-  - analyze_options(...) — options pricing & greeks
-  - pattern_recognition(run_dir) — chart pattern detection
-  - read_url(url) / read_document(path) / web_search(query) — content tools
-  - write_file(path, content) / read_file(path) — file I/O
-  - list_skills() / load_skill(name) — skill discovery
+Vibe-Trading MCP tools available to this skill (Claude Code is the harness; key tools):
+  Market data:    get_market_data
+  A-share data:   get_fundamentals, get_financial_statements, get_money_flow,
+                  get_margin_data, get_earnings_forecast, get_events
+  Backtest/anlys: backtest, factor_analysis, analyze_options, pattern_recognition
+  Alpha Zoo:      alpha_zoo, alpha_bench, alpha_compare
+  Hypotheses:     create_hypothesis, update_hypothesis, link_backtest, search_hypotheses
+  Research goals: start_research_goal, get_research_goal, add_goal_evidence, update_research_goal_status
+  Journal/shadow: analyze_trade_journal, extract_shadow_strategy, run_shadow_backtest,
+                  render_shadow_report, scan_shadow_signals
+  Trading (read-only): trading_connections, trading_select_connection, trading_check,
+                  trading_account, trading_positions, trading_orders, trading_quote, trading_history
+Native Claude Code tools (use directly, NOT an MCP tool): Read, Write, Edit, WebFetch, WebSearch, Skill.
 -->
 
 # Backtest Diagnosis
@@ -23,11 +27,11 @@ Use this skill when a user reports that a backtest failed, raised an error, or p
 
 ## Diagnostic Workflow
 
-1. **Read existing artifacts**: use `read_file` to inspect `artifacts/metrics.csv`, `equity.csv`, and `trades.csv`
-2. **Read the code**: use `read_file` to inspect `code/signal_engine.py` and `config.json`
+1. **Read existing artifacts**: use `Read` to inspect `artifacts/metrics.csv`, `equity.csv`, and `trades.csv`
+2. **Read the code**: use `Read` to inspect `code/signal_engine.py` and `config.json`
 3. **Classify the issue**: determine the root cause using the error taxonomy below
-4. **Apply the fix**: use `edit_file` to modify the code, then rerun the backtest
-5. **Verify the fix**: use `read_file` to inspect the new `metrics.csv`
+4. **Apply the fix**: use `Edit` to modify the code, then rerun the backtest
+5. **Verify the fix**: use `Read` to inspect the new `metrics.csv`
 
 ## Error Taxonomy
 
@@ -75,7 +79,7 @@ These issues require the user to check the API token, switch data sources, or wa
 
 ## Fixing Principles
 
-- Use **edit_file** to make precise code fixes instead of rewriting the entire file with `write_file`, unless the structure is fundamentally broken
+- Use **Edit** to make precise code fixes instead of rewriting the entire file with `Write`, unless the structure is fundamentally broken
 - Fix the bug only, do not change strategy logic unless the user explicitly asks
 - Fix one issue at a time, and rerun the backtest immediately after each fix
 - Limit yourself to at most 3 repair iterations

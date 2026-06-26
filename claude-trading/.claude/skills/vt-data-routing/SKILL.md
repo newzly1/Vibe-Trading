@@ -4,15 +4,19 @@ description: Data source selection decision tree. Load this skill BEFORE any bac
 ---
 
 <!--
-Available Vibe-Trading MCP tools for this skill:
-  - get_market_data(codes, start_date, end_date, source, interval) — fetch OHLCV
-  - backtest(run_dir) — run backtest from config.json + signal_engine.py
-  - factor_analysis(codes, factor_name, start_date, end_date, ...) — factor IC/returns
-  - analyze_options(...) — options pricing & greeks
-  - pattern_recognition(run_dir) — chart pattern detection
-  - read_url(url) / read_document(path) / web_search(query) — content tools
-  - write_file(path, content) / read_file(path) — file I/O
-  - list_skills() / load_skill(name) — skill discovery
+Vibe-Trading MCP tools available to this skill (Claude Code is the harness; key tools):
+  Market data:    get_market_data
+  A-share data:   get_fundamentals, get_financial_statements, get_money_flow,
+                  get_margin_data, get_earnings_forecast, get_events
+  Backtest/anlys: backtest, factor_analysis, analyze_options, pattern_recognition
+  Alpha Zoo:      alpha_zoo, alpha_bench, alpha_compare
+  Hypotheses:     create_hypothesis, update_hypothesis, link_backtest, search_hypotheses
+  Research goals: start_research_goal, get_research_goal, add_goal_evidence, update_research_goal_status
+  Journal/shadow: analyze_trade_journal, extract_shadow_strategy, run_shadow_backtest,
+                  render_shadow_report, scan_shadow_signals
+  Trading (read-only): trading_connections, trading_select_connection, trading_check,
+                  trading_account, trading_positions, trading_orders, trading_quote, trading_history
+Native Claude Code tools (use directly, NOT an MCP tool): Read, Write, Edit, WebFetch, WebSearch, Skill.
 -->
 
 ## Data Source Overview
@@ -24,20 +28,6 @@ Available Vibe-Trading MCP tools for this skill:
 | yfinance | US stocks, HK stocks, ETFs | No | Needs Yahoo Finance access | yfinance |
 | okx | Crypto (OKX exchange) | No | Needs okx.com access | okx-market |
 | ccxt | Crypto (100+ exchanges) | No | Needs exchange access | ccxt |
-
-## ⚠️ CRITICAL: Data-First Principle
-
-**When any analysis requires price data, financials, or market metrics, you MUST call `get_market_data` directly. Do NOT substitute with `web_search` — web search returns unstructured text snippets, not structured OHLCV data. Every specific number in your report (price, PE, volume, MA value) must be traceable to an MCP tool call.**
-
-```python
-# ✅ CORRECT: Direct MCP data fetch
-get_market_data(codes="300274.SZ", source="akshare", start_date="2025-01-01", end_date="2026-06-11")
-
-# ❌ WRONG: Substituting web search for real data
-web_search("阳光电源 300274 最新股价")  # Returns news snippets, not structured price data
-```
-
-**WebSearch is for qualitative context only** (news, sentiment, policy updates). It cannot replace structured market data.
 
 ## Decision Tree
 
@@ -60,7 +50,7 @@ You do NOT need to specify a concrete data source in config.json unless the user
 **Macro / economics**: akshare > tushare
 **Forex**: akshare > yfinance
 
-3. Load the corresponding skill for API details: `See the **vt-akshare** skill guide for details`
+3. Load the corresponding skill for API details: the **vt-akshare** skill
 
 ### Availability Check
 

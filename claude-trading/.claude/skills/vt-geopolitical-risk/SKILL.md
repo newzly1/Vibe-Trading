@@ -4,15 +4,19 @@ description: "Geopolitical risk analysis: quantify crisis signals, identify prec
 ---
 
 <!--
-Available Vibe-Trading MCP tools for this skill:
-  - get_market_data(codes, start_date, end_date, source, interval) — fetch OHLCV
-  - backtest(run_dir) — run backtest from config.json + signal_engine.py
-  - factor_analysis(codes, factor_name, start_date, end_date, ...) — factor IC/returns
-  - analyze_options(...) — options pricing & greeks
-  - pattern_recognition(run_dir) — chart pattern detection
-  - read_url(url) / read_document(path) / web_search(query) — content tools
-  - write_file(path, content) / read_file(path) — file I/O
-  - list_skills() / load_skill(name) — skill discovery
+Vibe-Trading MCP tools available to this skill (Claude Code is the harness; key tools):
+  Market data:    get_market_data
+  A-share data:   get_fundamentals, get_financial_statements, get_money_flow,
+                  get_margin_data, get_earnings_forecast, get_events
+  Backtest/anlys: backtest, factor_analysis, analyze_options, pattern_recognition
+  Alpha Zoo:      alpha_zoo, alpha_bench, alpha_compare
+  Hypotheses:     create_hypothesis, update_hypothesis, link_backtest, search_hypotheses
+  Research goals: start_research_goal, get_research_goal, add_goal_evidence, update_research_goal_status
+  Journal/shadow: analyze_trade_journal, extract_shadow_strategy, run_shadow_backtest,
+                  render_shadow_report, scan_shadow_signals
+  Trading (read-only): trading_connections, trading_select_connection, trading_check,
+                  trading_account, trading_positions, trading_orders, trading_quote, trading_history
+Native Claude Code tools (use directly, NOT an MCP tool): Read, Write, Edit, WebFetch, WebSearch, Skill.
 -->
 
 # Geopolitical Risk Analysis
@@ -715,11 +719,11 @@ def fetch_acled_events(country, start_date, end_date, api_key):
 ### 4. Real-Time News Sentiment Analysis
 
 ```python
-# Option A: Use the Jina Reader API integrated in the project through read_url
+# Option A: Use the Jina Reader API integrated in the project through WebFetch
 def analyze_geopolitical_news(query: str) -> dict:
     """Read news through Jina and analyze geopolitical-risk sentiment.
 
-    Use together with the agent's read_url tool.
+    Use together with the agent's WebFetch tool.
 
     Args:
         query: Search keywords
@@ -734,7 +738,7 @@ def analyze_geopolitical_news(query: str) -> dict:
         "https://www.ft.com/world",
         "https://www.foreignpolicy.com/"
     ]
-    # Use read_url to fetch content, then pass it to the LLM to extract risk events
+    # Use WebFetch to fetch content, then pass it to the LLM to extract risk events
 
 # Option B: Event Registry API (paid, structured news)
 # https://eventregistry.org/
