@@ -30,7 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AGENT_DIR = REPO_ROOT / "agent"
 LIST_TIMEOUT = 30.0
 
-FORBIDDEN_TOOLS = {"read_file", "write_file", "read_url", "read_document", "web_search"}
+FORBIDDEN_TOOLS = {
+    "read_file", "write_file", "read_url", "read_document", "web_search",
+    "load_skill", "list_skills",
+}
 ORDER_TOOLS = {
     "place_order",
     "cancel_order",

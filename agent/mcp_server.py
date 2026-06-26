@@ -77,7 +77,6 @@ logger = logging.getLogger(__name__)
 # Lazy-loaded singletons
 # ---------------------------------------------------------------------------
 
-_skills_loader = None
 _registry = None
 _goal_store = None
 _include_shell_tools = True
@@ -98,15 +97,6 @@ def _env_swarm_enabled() -> bool:
     if you need backward compatibility with the old swarm system.
     """
     return os.getenv("VIBE_TRADING_ENABLE_SWARM", "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _get_skills_loader():
-    global _skills_loader
-    if _skills_loader is None:
-        from src.agent.skills import SkillsLoader
-
-        _skills_loader = SkillsLoader()
-    return _skills_loader
 
 
 def _get_registry():
@@ -191,41 +181,6 @@ def _risk_tier_from_text(value: str):
     if risk_tier is RiskTier.LIVE_TRADING_OR_EXECUTION:
         raise ValueError("live trading or execution goals are not supported")
     return risk_tier
-
-
-# ---------------------------------------------------------------------------
-# Skill tools
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool
-def list_skills() -> str:
-    """List all available finance skills with names and descriptions.
-
-    Returns a JSON array of {name, description} for all loaded skills.
-    Use load_skill(name) to get the full documentation for any skill.
-    """
-    loader = _get_skills_loader()
-    skills = [{"name": s.name, "description": s.description} for s in loader.skills]
-    return json.dumps(skills, ensure_ascii=False, indent=2)
-
-
-@mcp.tool
-def load_skill(name: str) -> str:
-    """Load full documentation for a named finance skill.
-
-    Each skill is a comprehensive knowledge document covering methodology,
-    code templates, parameters, and examples. Use list_skills() first to
-    discover available skills.
-
-    Args:
-        name: Skill name (e.g. 'strategy-generate', 'risk-analysis', 'technical-basic').
-    """
-    loader = _get_skills_loader()
-    content = loader.get_content(name)
-    if content.startswith("Error:"):
-        return json.dumps({"status": "error", "error": content}, ensure_ascii=False)
-    return json.dumps({"status": "ok", "skill": name, "content": content}, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
