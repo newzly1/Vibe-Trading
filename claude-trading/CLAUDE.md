@@ -10,7 +10,7 @@ Vibe-Trading's core financial analysis capabilities have been ported to Claude C
 
 | Capability | Vehicle | Purpose |
 |------------|---------|---------|
-| Domain knowledge | 80 `.claude/skills/vt-*` skills | Formulas, parameters, methodology reference (auto-discovered, loaded on demand) |
+| Domain knowledge | 75 `.claude/skills/vt-*` skills | Formulas, parameters, methodology reference (auto-discovered, loaded on demand) |
 | Data + computation | MCP tools (42, via `.mcp.json`) | Market data, backtesting, factor analysis, Alpha Zoo, options pricing, hypothesis registry, fundamentals, events, etc. |
 | Parallel analysis | `vt-swarm-*` skills + `.claude/workflows/` + `Agent` tool | Replaces V-T's Swarm multi-agent framework (3 presets ported, 25 remaining) |
 | Code execution | `Bash` tool | Run Python scripts for custom computation |
@@ -37,11 +37,11 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
 
 **Trade journal & shadow**: `analyze_trade_journal`, `extract_shadow_strategy`, `run_shadow_backtest`, `render_shadow_report`, `scan_shadow_signals`.
 
-**Skills & discovery**: `list_skills`, `load_skill`.
+**Skills & discovery**: native to Claude Code — skills are auto-discovered from `.claude/skills/` and loaded on demand via the `Skill` tool (the MCP `list_skills`/`load_skill` wrappers were removed in the port).
 
 ### Skill Usage Guide
 
-80 `vt-*` skills are installed at `.claude/skills/`. Claude Code auto-discovers them at startup and injects one-line summaries into the system prompt. When a task touches a specific financial domain, the corresponding SKILL.md is auto-loaded as context.
+75 `vt-*` skills are installed at `.claude/skills/`. Claude Code auto-discovers them at startup and injects one-line summaries into the system prompt. When a task touches a specific financial domain, the corresponding SKILL.md is auto-loaded as context.
 
 **Skills are knowledge documents, not executable code** — they provide formulas, parameters, and methodology references. Actual computation still requires MCP tools or Bash-executed Python.
 
@@ -51,6 +51,11 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
 2. **Swarm replacement (Skills + Workflows)**: V-T's 28 Swarm presets are being ported as `vt-swarm-*` skills (knowledge) + `.claude/workflows/*.js` (deterministic orchestration). 3 presets ported so far — see [Swarm Replacement](#swarm-replacement-skills--workflows) below. Do NOT use `run_swarm`.
 3. **Skill guidance + MCP execution**: consult the relevant vt-* skill for methodology first, then execute computation via MCP tools.
 4. **Data first, always**: Before any analysis, call `get_market_data` with explicit `source` (A-shares: `source="akshare"` or `source="tushare"`; fallbacks: `tencent` → `baostock` → `mootdx`). For fundamentals/money-flow/margin data, use the new dedicated tools (`get_fundamentals`, `get_money_flow`, etc.) which route through Tushare. Never substitute WebSearch for real market data — WebSearch is for qualitative context only.
+
+**Domain-workflow routing** (detailed step sequences live in the named skills):
+- **Strategy → backtest:** consult **vt-strategy-generate** (SignalEngine contract + the author config.json/signal_engine.py → `backtest` → read metrics flow). Do not write a `run_backtest.py`; the engine is built-in.
+- **Trade-journal analysis:** consult **vt-trade-journal**, then `analyze_trade_journal`.
+- **Shadow strategy:** consult **vt-shadow-account** FIRST (it defines rules, attribution semantics, and the research-only disclaimer), then the `*_shadow_*` tools in order.
 
 ### Swarm Replacement: Skills + Workflows
 
@@ -90,4 +95,4 @@ Agent("bear_advocate", prompt="...")    # dispatch bear (parallel)
 - `run_swarm` is **deprecated** — use `vt-swarm-*` skills + workflows instead. The MCP tool still exists for backward compatibility but goes through V-T's ReAct agent loop.
 - A-share data: `get_market_data` with `source="auto"` may route to an unsupported source; explicitly specify `source="akshare"` or `source="tushare"`.
 - `backtest` requires a pre-prepared directory with `config.json` + `code/signal_engine.py`.
-- The 80 skills are knowledge documents, not executable code.
+- The 75 skills are knowledge documents, not executable code.
