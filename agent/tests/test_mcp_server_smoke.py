@@ -40,9 +40,10 @@ INIT_TIMEOUT = 30.0
 # safe lower bound that still flags the deadlock quickly.
 CALL_TIMEOUT = 15.0
 
-# Tools we rely on as a baseline. The repo currently ships 35 tools; we
-# assert ``>= 30`` so unrelated tool additions / removals don't break the
-# test, but a regression that drops half the catalogue still fires.
+# Tools we rely on as a baseline. After the capability-surface trim the
+# server ships ~44 tools; we assert ``>= 30`` so unrelated tool additions /
+# removals don't break the test, but a regression that drops half the
+# catalogue still fires.
 EXPECTED_MIN_TOOL_COUNT = 30
 REQUIRED_TOOL_NAMES = {
     "analyze_options",
