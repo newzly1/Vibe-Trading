@@ -4,99 +4,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Claude Code Integration: Vibe-Trading Financial Analysis
 
-Vibe-Trading's core financial analysis capabilities have been ported to Claude Code, bypassing V-T's own ReAct agent loop and using Claude Code's native reasoning for financial analysis.
+Vibe-Trading's core financial-analysis capabilities have been ported to Claude Code
+as the primary harness: Claude Code's native reasoning replaces V-T's own ReAct agent
+loop, and the V-T harness/services (loop, session, providers, CLI, REST API, web
+frontend, live-order engine, swarm engine) have been removed.
 
-### Capability Overview
+**The canonical Claude Code integration reference is
+[`claude-trading/CLAUDE.md`](claude-trading/CLAUDE.md)** — read it for the full MCP
+tool catalogue, the skills usage guide, and the swarm-replacement (subagents +
+slash commands) workflow. Summary:
 
 | Capability | Vehicle | Purpose |
 |------------|---------|---------|
-| Domain knowledge | 77 `.claude/skills/vt-*` skills | Formulas, parameters, methodology reference (auto-discovered, loaded on demand) |
-| Data + computation | MCP tools (43, via `.mcp.json`) | Market data, backtesting, factor analysis, Alpha Zoo, options pricing, hypothesis registry, etc. |
-| Parallel analysis | `vt-swarm-*` skills + `.claude/workflows/` + `Agent` tool | Replaces V-T's Swarm multi-agent framework (3 presets ported, 25 remaining) |
+| Domain knowledge | 75 `claude-trading/.claude/skills/vt-*` skills | Formulas, parameters, methodology (auto-discovered, loaded on demand) |
+| Data + computation | MCP tools (35, via `.mcp.json` → `vibe-trading-mcp`) | Market/fundamental data, backtesting, factors, Alpha Zoo, options, registries |
+| Parallel analysis | `claude-trading/.claude/agents/*` subagents + `.claude/commands/*` slash commands + `Agent` tool | Native replacement for V-T's Swarm (29 presets ported) |
 | Code execution | `Bash` tool | Run Python scripts for custom computation |
 
-### MCP Tools Quick Reference
-
-Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 43 tools:
-
-**Market data**: `get_market_data` — fetch OHLCV (A-shares / HK / US / crypto). For A-shares, explicitly specify `source="akshare"` or `source="tushare"`; do not rely on `source="auto"`.
-
-**Backtesting & analysis**: `backtest` (requires a pre-prepared directory with `config.json` + `code/signal_engine.py`), `factor_analysis` (factor IC/return analysis), `analyze_options` (options pricing & Greeks), `pattern_recognition` (candlestick pattern recognition).
-
-**Alpha Zoo**: `alpha_zoo` (browse/list/get 452 pre-built alphas), `alpha_bench` (batch benchmark a zoo — IC mean/std/IR/positive-ratio + HTML report), `alpha_compare` (head-to-head ranking of named alphas by IC metric).
-
-**Content tools**: `read_url`, `read_document`, `web_search`, `read_file`, `write_file`.
-
-**Trading connections**: `trading_connections`, `trading_select_connection`, `trading_check`, `trading_account`, `trading_positions`, `trading_orders`, `trading_quote`, `trading_history`.
-
-**Research goals**: `start_research_goal`, `get_research_goal`, `add_goal_evidence`, `update_research_goal_status`.
-
-**Hypothesis registry**: `create_hypothesis`, `update_hypothesis`, `link_backtest` (attach run cards), `search_hypotheses` (text search by status/query).
-
-**Other**: `list_skills`, `load_skill`, `list_runs`, `get_run_result`, `list_swarm_presets`, `run_swarm`, `get_swarm_status`, `reap_stale_runs`, `retry_run`, `analyze_trade_journal`, `extract_shadow_strategy`, `run_shadow_backtest`, `render_shadow_report`, `scan_shadow_signals`.
-
-### Skill Usage Guide
-
-77 `vt-*` skills are installed at `.claude/skills/`. Claude Code auto-discovers them at startup and injects one-line summaries into the system prompt. When a task touches a specific financial domain, the corresponding SKILL.md is auto-loaded as context.
-
-**Skills are knowledge documents, not executable code** — they provide formulas, parameters, and methodology references. Actual computation still requires MCP tools or Bash-executed Python.
-
-### Key Usage Patterns
-
-1. **Fetch → analyze → backtest** pipeline: call MCP tools directly in sequence; no agent loop needed.
-2. **Swarm replacement (Skills + Workflows)**: V-T's 28 Swarm presets are being ported as `vt-swarm-*` skills (knowledge) + `.claude/workflows/*.js` (deterministic orchestration). 3 presets ported so far — see [Swarm Replacement](#swarm-replacement-skills--workflows) below. Do NOT use `run_swarm`.
-3. **Skill guidance + MCP execution**: consult the relevant vt-* skill for methodology first, then execute computation via MCP tools.
-4. **Data first, always**: Before any analysis, call `get_market_data` with explicit `source` (A-shares: `source="akshare"`). Never substitute WebSearch for real market data — WebSearch is for qualitative context only.
-
-### Swarm Replacement: Skills + Workflows
-
-V-T's 28 YAML swarm presets are being ported to a two-layer architecture: **Skills** (knowledge/roles) + **Workflows** (deterministic DAG orchestration). This gives you the preset knowledge without V-T's ReAct agent loop.
-
-**Ported presets (3/28)**:
-
-| Preset | Skill | Workflow | Use Case |
-|--------|-------|----------|----------|
-| `investment_committee` | `vt-swarm-investment-committee` | `/workflow investment-committee` | Bull/bear debate → risk review → PM decision |
-| `equity_research_team` | `vt-swarm-equity-research-team` | `/workflow equity-research-team` | Macro → sector → stock → aggregated report |
-| `quant_strategy_desk` | `vt-swarm-quant-strategy-desk` | `/workflow quant-strategy-desk` | Screening + factor mining → backtest → risk audit |
-
-**Usage pattern**:
-
-```
-# Option A: Use the workflow (recommended — deterministic DAG)
-/workflow investment-committee target="300274.SZ" market="A-shares"
-
-# Option B: Manual Agent dispatch (flexible, follow skill guidance)
-Skill("vt-swarm-investment-committee")  # load the recipe
-Agent("bull_advocate", prompt="...")    # dispatch bull
-Agent("bear_advocate", prompt="...")    # dispatch bear (parallel)
-# ... then risk_officer → portfolio_manager sequentially
-```
-
-**Why this replaces `run_swarm`**:
-- Workflows use `parallel()` → `agent()` for deterministic DAG execution (no LLM guessing parallelism)
-- Skills provide the role definitions, output templates, and tool assignments from YAML presets
-- All agents are native Claude Code sub-agents with full MCP tool access
-- No V-T ReAct loop, no Python ThreadPoolExecutor, no swarm crash recovery
-
-**Adding more presets**: See the 3 existing skills + workflows as templates. Each YAML preset maps to one `SKILL.md` (role definitions, output specs) + one `.js` workflow (DAG structure in `parallel()`/`pipeline()`).
-
-### Known Limitations
-
-- `run_swarm` is **deprecated** — use `vt-swarm-*` skills + workflows instead. The MCP tool still exists for backward compatibility but goes through V-T's ReAct agent loop.
-- A-share data: `get_market_data` with `source="auto"` may route to an unsupported source; explicitly specify `source="akshare"` or `source="tushare"`.
-- `backtest` requires a pre-prepared directory with `config.json` + `code/signal_engine.py`.
-- The 77 skills are knowledge documents, not executable code.
+**Key usage patterns:**
+1. **Data first, always.** Before any analysis, call `get_market_data` with an explicit
+   `source` (A-shares: `source="akshare"` or `source="tushare"`). For
+   fundamentals/money-flow/margin, use the dedicated tools (`get_fundamentals`,
+   `get_money_flow`, …). Never substitute WebSearch for real market data.
+2. **Fetch → analyze → backtest** in sequence — call MCP tools directly; no agent loop.
+3. **Swarm replacement:** run a ported preset via its slash command
+   (e.g. `/investment-committee 300274.SZ A-shares`) or dispatch
+   `claude-trading/.claude/agents/*` subagents with the `Agent` tool. `run_swarm` and
+   the run-management tools have been removed (contract-locked absent).
+4. **No live orders.** No order-placement tool (`place_order`/`cancel_order`/
+   `trading_place_order`/`trading_cancel_order`/`propose_mandate`) is exposed; the
+   contract test pins them absent. The `trading_*` tools are read-only.
 
 ---
 
 ## Project Architecture (Vibe-Trading Codebase)
 
-The sections below describe the repo's own architecture, for reference when modifying code, maintaining the MCP server, or extending skills.
+The sections below describe the repo's surviving architecture, for reference when
+modifying code, maintaining the MCP server, or extending skills. After the Claude
+Code port the codebase is the MCP backend (capabilities) plus the
+`claude-trading/` port artifacts — the V-T harness, services, live-order engine,
+and swarm engine were removed.
 
 ### Package Layout
 
-`pyproject.toml` maps `package-dir = {"" = "agent"}` — **`agent/` is the Python package root**. Inside it, `src/`, `backtest/`, and `cli/` are top-level packages. CLI entry points: `vibe-trading` → `cli:main`, `vibe-trading-mcp` → `mcp_server:main`.
+`pyproject.toml` maps `package-dir = {"" = "agent"}` — **`agent/` is the Python package
+root**. Inside it, `src/` and `backtest/` are top-level packages. The sole entry point
+is `vibe-trading-mcp` → `mcp_server:main`.
 
 ### Essential Commands
 
@@ -110,48 +63,54 @@ pytest --ignore=agent/tests/e2e_backtest --ignore=agent/tests/test_e2e_harness_v
 # Alpha zoo gates only
 pytest agent/tests/factors/test_alpha_purity.py agent/tests/factors/test_lookahead.py -q
 
-# Live trading safety tests
-pytest agent/tests/test_sdk_order_gate.py agent/tests/test_mandate_enforcement.py agent/tests/test_killswitch_blocks_orders.py agent/tests/test_readonly_default.py -q
+# MCP capability surface (catalogue lock + server smoke)
+pytest agent/tests/test_mcp_capability_contract.py agent/tests/test_mcp_server_smoke.py -q
 
 # Syntax check (run before tests)
-cd agent && python -m compileall -q cli && python -m py_compile api_server.py mcp_server.py
+cd agent && python -m py_compile mcp_server.py
 
-# Frontend
-cd frontend && npm ci && npm run build      # build
-cd frontend && npx vitest run               # test
-cd frontend && npm run dev                   # dev server (port 5899)
+# Regenerate the ported skills / subagents+commands from their sources
+python claude-trading/tools/port_skills.py
+python claude-trading/tools/port_swarm.py
 
 # Lint
 ruff check agent/
-
-# Docker
-docker compose up --build
 ```
 
 ### MCP Server (`agent/mcp_server.py`)
 
-Built on `fastmcp`. Exposes V-T's tool registry as MCP tools via stdio (default) or SSE transport. Tools are read from the auto-discovery mechanism in `agent/src/tools/` — no manual registration needed.
+Built on `fastmcp`. Exposes V-T's capabilities as 35 MCP tools via stdio (default) or
+SSE transport. Each `@mcp.tool` wrapper is defined explicitly; data/goal/hypothesis
+tools are inline, and the heavier tools (backtest, factors, alpha zoo, options,
+pattern, shadow, trade journal, read-only `trading_*`) are dispatched by name through
+`build_registry()` (`registry.execute("<name>", …)`). The catalogue is selective — the
+registry may hold more tools than the server exposes.
 
 **Adding a new MCP tool**:
 1. Create a file in `agent/src/tools/` with a class extending `BaseTool`
 2. Set a non-empty `name`, implement `execute(**kwargs) -> str` (return JSON)
-3. Optional: implement `check_available() -> False` to silently skip tools with missing deps
+3. Add an `@mcp.tool` wrapper in `mcp_server.py` that calls `registry.execute(...)`
 4. Restart the MCP server for the new tool to take effect
+
+The catalogue is contract-locked by `agent/tests/test_mcp_capability_contract.py`:
+order tools and harness-duplicate I/O / skill / swarm tools are pinned **absent**;
+the core analysis tools are pinned **present**.
 
 ### Skills System (`agent/src/skills/`)
 
-76+ bundled financial analysis skills. Each skill is a directory under `agent/src/skills/<name>/` containing at minimum a `SKILL.md` with frontmatter (name, description, category).
-
-**Loading mechanism** (progressive disclosure): the system prompt injects only one-line summaries (`get_descriptions()`), and full documentation is loaded on demand by the `load_skill` tool (`get_content()`). The loader lives in `agent/src/agent/skills.py` (`SkillsLoader` class).
-
-**Converting a V-T skill to a Claude Code skill**:
-1. Copy `agent/src/skills/<name>/SKILL.md` to `.claude/skills/vt-<name>/SKILL.md`
-2. Replace `load_skill("xxx")` references with cross-skill links (`See the **vt-xxx** skill guide`)
-3. Inject the available MCP tool list at the top (HTML comment — visible to Claude, hidden from user)
+Bundled financial-analysis skills, one directory per skill under
+`agent/src/skills/<name>/` with a `SKILL.md` (frontmatter: name, description,
+category). These are the canonical SOURCE; the Claude Code skills under
+`claude-trading/.claude/skills/vt-*/` are GENERATED from them by
+`claude-trading/tools/port_skills.py` (corpus-tested by `test_port_skills.py`). Claude
+Code auto-discovers the generated skills and loads each `SKILL.md` on demand.
 
 ### Tool Auto-Discovery (`agent/src/tools/__init__.py`)
 
-**No manual registration.** Tools are discovered by scanning `BaseTool.__subclasses__()`. `build_registry()` wires local tools first, then optionally appends MCP tools from `AgentConfig.mcp_servers`. Shell tools, goal tools, and swarm tools receive special constructor injection (persistent memory, session_id, event_callbacks). Live-broker MCP channels route through the `trading_*` connector surface, not raw `mcp_<broker>_*` wrappers.
+**No manual registration.** `build_registry()` discovers `BaseTool` subclasses by
+scanning `BaseTool.__subclasses__()`, wires local tools first, then optionally appends
+remote MCP tools from `AgentConfig.mcp_servers`. Goal tools receive special constructor
+injection (session_id, event_callbacks); shell tools are gated by `include_shell_tools`.
 
 ### Alpha Zoo / Factors (`agent/src/factors/`)
 
@@ -161,79 +120,72 @@ Built on `fastmcp`. Exposes V-T's tool registry as MCP tools via stdio (default)
 - `qlib158/` — Microsoft Qlib (Apache-2.0 attributed)
 - `academic/` — Fama-French 5 + Carhart price-based proxies
 
-**Architecture**: `registry.py` AST-scans zoo modules to extract `__alpha_meta__` dicts (Pydantic-validated) without importing code. Each alpha file defines `__alpha_meta__` (id, theme, formula_latex, columns_required, universe, frequency, etc.) and a pure `compute(panel) -> DataFrame` function. **Purity gate** (`test_alpha_purity.py`) AST-scans for forbidden imports — only `pandas`, `numpy`, `scipy.*`, and `src.factors.base` are allowed. **Lookahead gate** (`test_lookahead.py`) verifies no forward leakage. `bench_runner.py` evaluates zoos via IC/IR; `compare_runner.py` does head-to-head comparisons with subset filtering.
+**Architecture**: `registry.py` AST-scans zoo modules to extract `__alpha_meta__` dicts
+(Pydantic-validated) without importing code. Each alpha file defines `__alpha_meta__`
+(id, theme, formula_latex, columns_required, universe, frequency, etc.) and a pure
+`compute(panel) -> DataFrame` function. **Purity gate** (`test_alpha_purity.py`)
+AST-scans for forbidden imports — only `pandas`, `numpy`, `scipy.*`, and
+`src.factors.base` are allowed. **Lookahead gate** (`test_lookahead.py`) verifies no
+forward leakage. `bench_runner.py` evaluates zoos via IC/IR; `compare_runner.py` does
+head-to-head comparisons with subset filtering.
 
 ### Backtest System (`agent/backtest/`)
 
-- **`runner.py`**: Entry point that reads `config.json` from a run directory, resolves the loader, imports the signal engine, and runs the backtest.
-- **`loaders/`**: DataLoader Protocol with 7 sources (tushare, yfinance, okx, ccxt, akshare, mootdx, futu) and auto-fallback chains.
-- **`engines/`**: 7 asset-class engines + `CompositeEngine` (cross-market with shared capital pool) + options portfolio engine. Market detection lives in `engines/_market_hooks.py`.
-- **`optimizers/`**: 4 portfolio optimizers (mean_variance, risk_parity, equal_volatility, max_diversification).
-- Config validation uses Pydantic (`BacktestConfigSchema`). The `--interval` flag supports `1m`/`5m`/`15m`/`30m`/`1H`/`4H`/`1D`.
+- **`runner.py`**: Entry point that reads `config.json` from a run directory, resolves
+  the loader, imports the signal engine, and runs the backtest.
+- **`loaders/`**: DataLoader Protocol with 7 sources (tushare, yfinance, okx, ccxt,
+  akshare, mootdx, futu) and auto-fallback chains.
+- **`engines/`**: 7 asset-class engines + `CompositeEngine` (cross-market with shared
+  capital pool) + options portfolio engine. Market detection lives in
+  `engines/_market_hooks.py`.
+- **`optimizers/`**: 4 portfolio optimizers (mean_variance, risk_parity,
+  equal_volatility, max_diversification).
+- Config validation uses Pydantic (`BacktestConfigSchema`). The `--interval` flag
+  supports `1m`/`5m`/`15m`/`30m`/`1H`/`4H`/`1D`.
 
-### Trading Connectors (`agent/src/trading/connectors/`)
+### Trading Connectors (`agent/src/trading/`)
 
-10 broker connectors: ibkr, robinhood, alpaca, binance, okx, futu, tiger, longbridge, dhan, shoonya. Connector-first design: users select a profile, and all `trading_*` tools route through it. Paper/live is a structural per-broker attribute (account-id format, host, demo flag, trade environment). Brokers without a runtime paper/live discriminator (Longbridge, Dhan, Shoonya) are capped at paper + read-only.
-
-### Live Trading Safety (`agent/src/live/`)
-
-All broker order paths pass through: mandate (symbol universe, size, exposure, leverage, daily cap) → kill switch (filesystem, instant halt) → pre-trade order guard (fail-closed) → audit ledger. The mandate is read-only at the agent loop — no write path reachable from a tool. The **runtime** subsystem (`live/runtime/`) provides a persistent autonomous scheduler with a durable crash-safe job store, runner liveness monitoring, trade reconciliation, preemptive halt, and position flattening.
-
-### Swarm (`agent/src/swarm/`)
-
-DAG execution engine with YAML-defined presets. `runtime.py` orchestrates workers, each with a filtered tool registry. Status reconciles from live task files (crash recovery). **Not recommended in the Claude Code integration** — use `dispatching-parallel-agents` + `Agent` tool instead.
+Read-only broker access for the `trading_*` tools (connections, account, positions,
+open orders, quote, history). 10 connectors: ibkr, robinhood, alpaca, binance, okx,
+futu, tiger, longbridge, dhan, shoonya. Connector-first design: users select a
+profile and all `trading_*` tools route through it. **No order-placement path is
+exposed in this port** — the live-order engine, mandate, kill switch, order guard,
+and audit ledger were removed (decision: no live trading in the Claude Code harness).
 
 ### Other Packages
 
-- **`agent/src/hypotheses/`** — Durable research hypothesis registry with status tracking and backtest linking.
-- **`agent/src/memory/`** — Persistent cross-session memory with FTS search and CJK-safe slugs.
-- **`agent/src/shadow_account/`** — Extracts trading patterns from user broker statements; generates PDF reports via Jinja2 + WeasyPrint.
-- **`agent/src/goal/`** — Research goal runtime: persistent objectives with criteria, evidence, claims, and completion policy.
-- **`agent/src/security/`** — Path containment, secret redaction, and sandbox enforcement.
+- **`agent/src/hypotheses/`** — Durable research hypothesis registry with status
+  tracking and backtest linking.
+- **`agent/src/shadow_account/`** — Extracts trading patterns from user broker
+  statements; generates PDF reports via Jinja2 + WeasyPrint.
+- **`agent/src/goal/`** — Research goal runtime: persistent objectives with criteria,
+  evidence, claims, and completion policy.
+- **`agent/src/security/`** — Path containment, secret redaction, and sandbox
+  enforcement.
 
-### API Server (`agent/api_server.py`)
-
-FastAPI server (~3100 LOC) serving the React frontend as static files plus REST API routes: agent chat, runs, sessions, alpha bench/compare, swarm, settings, correlation, uploads, goals, hypotheses. SPA deep-link support for `/runs/{id}` and `/correlation`. SSE event streaming for real-time agent progress.
-
-### Frontend (`frontend/`)
-
-React 19 + Vite + TypeScript + Tailwind CSS. Zustand for state management (`stores/agent.ts` is the main agent store). ECharts for charts. React Router v7 with pages: Agent (chat), AlphaZoo, RunDetail, Compare, Correlation, Home, Settings. The Vite dev server proxies `/api`, `/runs`, `/sessions`, `/alpha`, `/swarm`, `/settings`, `/uploads`, `/correlation` to `localhost:8899`.
-
-### Session Layer (`agent/src/session/`)
-
-Multi-turn chat stored as JSONL files with `flush + fsync` on each append for crash safety. FTS5-backed cross-session search. SSE event streaming via `sse-starlette`. Corrupted JSONL lines are skipped with first-200-char logging.
-
-### CLI (`agent/cli/`)
-
-Interactive REPL with Rich-based rendering, slash-command router, `prompt_toolkit` input (with readline fallback), live status bar, and progress indicators. Subcommands: `chat`, `alpha bench/compare`, `connector`, `swarm`, `goal`, `hypothesis`, `memory`, `provider login`, `serve`.
-
-### LLM Provider System (`agent/src/providers/`)
-
-Multi-provider support registered in `llm_providers.json`. Each provider entry defines: name, label, `api_key_env` / `base_url_env`, `default_model`, `default_base_url`, and optional `auth_type` (api_key or oauth). The `llm.py` module wraps langchain, handling provider-specific quirks (e.g., Gemini `thought_signature` round-tripping for multi-turn tool calls). OpenAI Codex uses ChatGPT OAuth via `vibe-trading provider login openai-codex`.
+Free-form cross-session memory now uses Claude Code's native file-based memory; V-T's
+`src/memory/persistent.py` and the `remember` tool were removed.
 
 ### Config System (`agent/src/config/`)
 
-Pydantic-based schema for `~/.vibe-trading/agent.json`. Validates MCP server entries, detects live-broker URLs by host suffix (not config key) to prevent bypass, and enforces wildcard-tool rejection for live brokers.
-
-### Docker
-
-Multi-stage build: Node 20 frontend build → Python 3.11-slim runtime. Runs as non-root user `vibe` with healthcheck on `/health`. Port 8899 (bound to loopback by default). Two named volumes (`vibe-runs`, `vibe-sessions`). `VIBE_TRADING_TRUST_DOCKER_LOOPBACK=1` skips `API_AUTH_KEY` for Docker Desktop host-gateway connections.
+Pydantic-based schema for `~/.vibe-trading/agent.json`. Validates MCP server entries
+(used when `build_registry` appends remote MCP tools).
 
 ## Key Environment Variables
 
 | Variable | Role |
 |----------|------|
-| `LANGCHAIN_PROVIDER` | LLM provider name (openrouter, deepseek, groq, ollama, etc.) |
-| `<PROVIDER>_API_KEY` / `<PROVIDER>_BASE_URL` | Per-provider credentials |
-| `LANGCHAIN_MODEL_NAME` | Model name |
-| `API_AUTH_KEY` | Required for non-loopback API access |
-| `VIBE_TRADING_ENABLE_SHELL_TOOLS` | Opt-in for shell tools in remote deployments |
+| `VIBE_TRADING_ENABLE_SHELL_TOOLS` | Opt-in for shell tools in networked MCP deployments |
 | `VIBE_TRADING_DATA_CACHE` | Opt-in local data caching (`~/.vibe-trading/cache`) |
 | `TUSHARE_TOKEN` | Optional A-share data token (falls back to mootdx/AKShare) |
 
 ## Test Organization
 
-Tests live in `agent/tests/`. `conftest.py` provides shared fixtures. Test files are named by feature (not by source module). Key markers: `@pytest.mark.unit` (fast, no network), `@pytest.mark.integration` (may need network). `test_e2e_harness_v2.py` is gated behind `VIBE_TRADING_RUN_LIVE_E2E=1` (real LLM calls).
+Tests live in `agent/tests/`. `conftest.py` provides shared fixtures. Test files are
+named by feature (not by source module). Key markers: `@pytest.mark.unit` (fast, no
+network), `@pytest.mark.integration` (may need network). `test_e2e_harness_v2.py` is
+gated behind `VIBE_TRADING_RUN_LIVE_E2E=1` (real LLM calls). The converter corpus tests
+live under `claude-trading/tools/`.
 
 ## Code Style
 

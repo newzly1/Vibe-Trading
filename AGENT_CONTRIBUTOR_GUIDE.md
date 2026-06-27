@@ -8,12 +8,12 @@ expectations explicit.
 ## Repository Shape
 
 - Backend and package code live under `agent/`.
-- Frontend code lives under `frontend/`.
+- Claude Code port artifacts (skills, subagents, slash commands, converters) live
+  under `claude-trading/`.
 - Public wiki content lives under `wiki/` and has separate GitHub Actions checks.
 - MCP entry point: `vibe-trading-mcp` / `agent/mcp_server.py`.
-- CLI entry point: `vibe-trading` / `agent/cli/`.
-- Broker connector, mandate, order gate, halt, and audit-ledger logic are safety
-  critical even when a change appears small.
+- Read-only broker connector logic (`agent/src/trading/`) is safety critical even
+  when a change appears small; no order-placement path is exposed in this port.
 - Community commits must include the DCO `Signed-off-by:` trailer; see
   `CONTRIBUTING.md`.
 
@@ -28,11 +28,9 @@ These commands are normally safe for local validation:
 ```bash
 git status --short --branch
 git diff --check
-python -m compileall -q agent/cli
-python -m py_compile agent/api_server.py agent/mcp_server.py
+python -m py_compile agent/mcp_server.py
 pytest --ignore=agent/tests/e2e_backtest --ignore=agent/tests/test_e2e_harness_v2.py --tb=short -q
-pytest agent/tests/test_sdk_order_gate.py agent/tests/test_mandate_enforcement.py -q
-cd frontend && npm ci && npm run build
+pytest agent/tests/test_mcp_capability_contract.py agent/tests/test_mcp_server_smoke.py -q
 ```
 
 Use the narrowest test command that matches the changed files when a full suite
@@ -62,25 +60,16 @@ For general Python changes:
 pytest --ignore=agent/tests/e2e_backtest --ignore=agent/tests/test_e2e_harness_v2.py --tb=short -q
 ```
 
-For live/order safety changes:
+For the MCP capability surface (catalogue lock + server smoke):
 
 ```bash
-pytest agent/tests/test_sdk_order_gate.py \
-  agent/tests/test_mandate_enforcement.py \
-  agent/tests/test_killswitch_blocks_orders.py \
-  agent/tests/test_readonly_default.py -q
+pytest agent/tests/test_mcp_capability_contract.py agent/tests/test_mcp_server_smoke.py -q
 ```
 
 For factor-zoo changes:
 
 ```bash
 pytest agent/tests/factors/test_alpha_purity.py agent/tests/factors/test_lookahead.py -q
-```
-
-For frontend changes:
-
-```bash
-cd frontend && npm ci && npm run build
 ```
 
 ## Documentation Rules
