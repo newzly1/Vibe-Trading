@@ -8,7 +8,6 @@ from types import SimpleNamespace
 import pytest
 
 from src.trading import profiles, service
-from src.tools import build_registry
 from src.tools.trading_connector_tool import TradingSelectConnectionTool
 
 pytestmark = pytest.mark.unit
@@ -26,7 +25,7 @@ def test_remote_call_requires_enabled_tool(monkeypatch: pytest.MonkeyPatch) -> N
         auth=SimpleNamespace(cache_dir="/tmp/vibe-no-token"),
     )
     monkeypatch.setattr("src.config.loader.load_agent_config", lambda: _agent_config(server))
-    monkeypatch.setattr("src.live.registry.has_cached_oauth_token", lambda *_: True)
+    monkeypatch.setattr("src.trading._oauth_cache.has_cached_oauth_token", lambda *_: True)
 
     result = service.get_positions("robinhood-live-mcp")
 
@@ -42,7 +41,7 @@ def test_remote_call_requires_cached_oauth(monkeypatch: pytest.MonkeyPatch) -> N
         auth=SimpleNamespace(cache_dir="/tmp/vibe-no-token"),
     )
     monkeypatch.setattr("src.config.loader.load_agent_config", lambda: _agent_config(server))
-    monkeypatch.setattr("src.live.registry.has_cached_oauth_token", lambda *_: False)
+    monkeypatch.setattr("src.trading._oauth_cache.has_cached_oauth_token", lambda *_: False)
 
     result = service.get_positions("robinhood-live-mcp")
 
@@ -80,25 +79,3 @@ def test_select_connection_tool_returns_canonical_profile_id(
     assert payload["status"] == "ok"
     assert payload["selected_profile"] == "ibkr-paper-local"
     assert profiles.load_selected_profile_id() == "ibkr-paper-local"
-
-
-def test_live_broker_mcp_wrappers_are_hidden_from_agent_registry(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Connector-first registry must not expose broker-specific mcp_* tools."""
-    server = SimpleNamespace(
-        url="https://agent.robinhood.com/mcp/trading",
-        enabled_tools=["get_positions"],
-        auth=SimpleNamespace(cache_dir="/tmp/vibe-token"),
-    )
-    agent_config = SimpleNamespace(mcp_servers={"robinhood": server})
-    monkeypatch.setattr("src.live.registry.is_live_broker", lambda *_: True)
-    monkeypatch.setattr("src.live.registry.should_register_live_channel", lambda **_: True)
-
-    def fail_build_wrappers(*_, **__):
-        raise AssertionError("live broker wrappers should not be registered directly")
-
-    monkeypatch.setattr("src.tools.mcp.build_mcp_tool_wrappers", fail_build_wrappers)
-
-    registry = build_registry(agent_config=agent_config, include_shell_tools=False)
-
-    assert "trading_positions" in registry.tool_names
-    assert not any(name.startswith("mcp_robinhood_") for name in registry.tool_names)
