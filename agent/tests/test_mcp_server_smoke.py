@@ -41,7 +41,7 @@ INIT_TIMEOUT = 30.0
 CALL_TIMEOUT = 15.0
 
 # Tools we rely on as a baseline. After the capability-surface trim the
-# server ships ~42 tools; we assert ``>= 30`` so unrelated tool additions /
+# server ships ~35 tools; we assert ``>= 30`` so unrelated tool additions /
 # removals don't break the test, but a regression that drops half the
 # catalogue still fires.
 EXPECTED_MIN_TOOL_COUNT = 30

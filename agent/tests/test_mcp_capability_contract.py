@@ -8,9 +8,10 @@ Pins the tool catalogue exposed to Claude Code (the harness):
   trading does not go through Claude Code).
 - The research/analysis capability tools must be PRESENT.
 
-NOTE: ``load_skill`` / ``list_skills`` and the swarm/run tools are removed
-in later port plans (after native skills / subagents land); they are
-intentionally NOT in FORBIDDEN_TOOLS yet.
+NOTE: ``load_skill`` / ``list_skills`` are removed (native skill discovery)
+and the swarm + run-management tools are removed (swarm is replaced by native
+subagents + slash commands in ``.claude/agents`` + ``.claude/commands``). All
+are pinned ABSENT in FORBIDDEN_TOOLS below.
 """
 
 from __future__ import annotations
@@ -31,8 +32,13 @@ AGENT_DIR = REPO_ROOT / "agent"
 LIST_TIMEOUT = 30.0
 
 FORBIDDEN_TOOLS = {
+    # harness-duplicate I/O (Claude Code has native equivalents)
     "read_file", "write_file", "read_url", "read_document", "web_search",
+    # native skill discovery replaces these
     "load_skill", "list_skills",
+    # swarm replaced by native subagents + slash commands; run-mgmt was swarm-only
+    "run_swarm", "list_swarm_presets", "get_swarm_status",
+    "list_runs", "get_run_result", "reap_stale_runs", "retry_run",
 }
 ORDER_TOOLS = {
     "place_order",
