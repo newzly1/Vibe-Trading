@@ -144,6 +144,10 @@ def test_mcp_server_happy_path() -> None:
     # Force unbuffered stdio in the child so its responses reach our reader
     # without being held in libc/Python buffers.
     env["PYTHONUNBUFFERED"] = "1"
+    # Disable fastmcp's PyPI update check — in a network-restricted environment it
+    # can hang the cold-import path and time out the initialize handshake. (Same
+    # guard the capability-contract test uses.)
+    env["FASTMCP_CHECK_FOR_UPDATES"] = "off"
 
     proc = subprocess.Popen(
         [sys.executable, "-c", "from mcp_server import main; main()"],
