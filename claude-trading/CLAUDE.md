@@ -11,13 +11,13 @@ Vibe-Trading's core financial analysis capabilities have been ported to Claude C
 | Capability | Vehicle | Purpose |
 |------------|---------|---------|
 | Domain knowledge | 75 `.claude/skills/vt-*` skills | Formulas, parameters, methodology reference (auto-discovered, loaded on demand) |
-| Data + computation | MCP tools (42, via `.mcp.json`) | Market data, backtesting, factor analysis, Alpha Zoo, options pricing, hypothesis registry, fundamentals, events, etc. |
-| Parallel analysis | `vt-swarm-*` skills + `.claude/workflows/` + `Agent` tool | Replaces V-T's Swarm multi-agent framework (3 presets ported, 25 remaining) |
+| Data + computation | MCP tools (35, via `.mcp.json`) | Market data, backtesting, factor analysis, Alpha Zoo, options pricing, hypothesis registry, fundamentals, events, etc. |
+| Parallel analysis | `.claude/agents/` subagents + `.claude/commands/` slash commands + `Agent` tool | Native replacement for V-T's Swarm — 29 preset teams ported as subagents + `/`-commands |
 | Code execution | `Bash` tool | Run Python scripts for custom computation |
 
 ### MCP Tools Quick Reference
 
-Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
+Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 35 tools:
 
 **Market data**: `get_market_data` — fetch OHLCV (A-shares / HK / US / crypto). For A-shares, explicitly specify `source="akshare"` or `source="tushare"`; do not rely on `source="auto"`.
 
@@ -48,7 +48,7 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
 ### Key Usage Patterns
 
 1. **Fetch → analyze → backtest** pipeline: call MCP tools directly in sequence; no agent loop needed.
-2. **Swarm replacement (Skills + Workflows)**: V-T's 28 Swarm presets are being ported as `vt-swarm-*` skills (knowledge) + `.claude/workflows/*.js` (deterministic orchestration). 3 presets ported so far — see [Swarm Replacement](#swarm-replacement-skills--workflows) below. Do NOT use `run_swarm`.
+2. **Swarm replacement (subagents + commands)**: run a ported preset via its slash command (e.g. `/investment-committee <target> <market>`) or dispatch `.claude/agents/*` subagents directly with the `Agent` tool. `run_swarm` has been removed.
 3. **Skill guidance + MCP execution**: consult the relevant vt-* skill for methodology first, then execute computation via MCP tools.
 4. **Data first, always**: Before any analysis, call `get_market_data` with explicit `source` (A-shares: `source="akshare"` or `source="tushare"`; fallbacks: `tencent` → `baostock` → `mootdx`). For fundamentals/money-flow/margin data, use the new dedicated tools (`get_fundamentals`, `get_money_flow`, etc.) which route through Tushare. Never substitute WebSearch for real market data — WebSearch is for qualitative context only.
 
@@ -57,44 +57,36 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
 - **Trade-journal analysis:** consult **vt-trade-journal**, then `analyze_trade_journal`.
 - **Shadow strategy:** consult **vt-shadow-account** FIRST (it defines rules, attribution semantics, and the research-only disclaimer), then the `*_shadow_*` tools in order.
 
-### Swarm Replacement: Skills + Workflows
+### Swarm Replacement: Subagents + Slash Commands
 
-V-T's 28 YAML swarm presets are being ported to a two-layer architecture: **Skills** (knowledge/roles) + **Workflows** (deterministic DAG orchestration). This gives you the preset knowledge without V-T's ReAct agent loop.
+V-T's 29 YAML swarm presets are ported to native Claude Code primitives — no
+`run_swarm`, no V-T ReAct loop. Each preset became:
 
-> **Interim status (Plan 2):** the 3 `vt-swarm-*` skills and `.claude/workflows/*.js` described below were removed during the skills port and are being re-ported in Plan 3. Until then the swarm skills and `/workflow` commands here are not yet available — use direct `Agent` dispatch following the skill guidance instead.
+- **Subagents** (`.claude/agents/<preset>-<role>.md`, 113 total) — one per preset
+  role, carrying that role's persona, analytical dimensions, and output spec.
+- **A slash command** (`.claude/commands/<preset>.md`, 29 total) — orchestrates
+  the preset's task DAG: it dispatches the subagents in dependency order
+  (phases run sequentially; agents within a phase run in parallel) and feeds
+  each downstream role its upstream outputs.
 
-**Ported presets (3/28)**:
-
-| Preset | Skill | Workflow | Use Case |
-|--------|-------|----------|----------|
-| `investment_committee` | `vt-swarm-investment-committee` | `/workflow investment-committee` | Bull/bear debate → risk review → PM decision |
-| `equity_research_team` | `vt-swarm-equity-research-team` | `/workflow equity-research-team` | Macro → sector → stock → aggregated report |
-| `quant_strategy_desk` | `vt-swarm-quant-strategy-desk` | `/workflow quant-strategy-desk` | Screening + factor mining → backtest → risk audit |
-
-**Usage pattern**:
+**Usage:**
 
 ```
-# Option A: Use the workflow (recommended — deterministic DAG)
-/workflow investment-committee target="300274.SZ" market="A-shares"
-
-# Option B: Manual Agent dispatch (flexible, follow skill guidance)
-Skill("vt-swarm-investment-committee")  # load the recipe
-Agent("bull_advocate", prompt="...")    # dispatch bull
-Agent("bear_advocate", prompt="...")    # dispatch bear (parallel)
-# ... then risk_officer → portfolio_manager sequentially
+/investment-committee 300274.SZ A-shares
+/equity-research-team A-shares "Q2 2026 outlook"
 ```
 
-**Why this replaces `run_swarm`**:
-- Workflows use `parallel()` → `agent()` for deterministic DAG execution (no LLM guessing parallelism)
-- Skills provide the role definitions, output templates, and tool assignments from YAML presets
-- All agents are native Claude Code sub-agents with full MCP tool access
-- No V-T ReAct loop, no Python ThreadPoolExecutor, no swarm crash recovery
+The command (read by the orchestrating agent) lays out the phases and dispatches
+each `Agent(subagent_type="<preset>-<role>", prompt=...)`. You can also dispatch
+the subagents manually with the `Agent` tool for ad-hoc team compositions.
 
-**Adding more presets**: See the 3 existing skills + workflows as templates. Each YAML preset maps to one `SKILL.md` (role definitions, output specs) + one `.js` workflow (DAG structure in `parallel()`/`pipeline()`).
+**Regenerating:** the subagents and commands are generated from the YAML presets
+by `claude-trading/tools/port_swarm.py` (corpus-tested by `test_port_swarm.py`).
+Edit a preset and re-run the converter; do not hand-edit generated files.
 
 ### Known Limitations
 
-- `run_swarm` is **deprecated** — use `vt-swarm-*` skills + workflows instead. The MCP tool still exists for backward compatibility but goes through V-T's ReAct agent loop.
+- `run_swarm` and the swarm run-management tools have been **removed** from the MCP catalogue (the contract test enforces their absence). Use the `/`-commands in `.claude/commands/` instead.
 - A-share data: `get_market_data` with `source="auto"` may route to an unsupported source; explicitly specify `source="akshare"` or `source="tushare"`.
 - `backtest` requires a pre-prepared directory with `config.json` + `code/signal_engine.py`.
 - The 75 skills are knowledge documents, not executable code.
