@@ -74,7 +74,7 @@ def test_build_registry_without_agent_config_returns_well_known_local_tools() ->
     registry = build_registry()
     names = set(registry.tool_names)
 
-    expected = {"load_skill", "backtest", "web_search", "read_file"}
+    expected = {"backtest", "get_market_data", "alpha_zoo", "factor_analysis"}
     missing = expected - names
     assert not missing, (
         f"Expected well-known local tools in registry but these are missing: {missing}"
@@ -151,17 +151,18 @@ def test_mcp_server_exposes_well_known_tool_names() -> None:
     registered = {t.name for t in tools}
 
     expected = {
-        "list_skills",
-        "load_skill",
         "backtest",
-        "web_search",
-        "read_url",
-        "read_document",
-        "write_file",
-        "read_file",
-        "list_swarm_presets",
-        "run_swarm",
-        "retry_run",
+        "get_market_data",
+        "factor_analysis",
+        "analyze_options",
+        "pattern_recognition",
+        "alpha_zoo",
+        "alpha_bench",
+        "alpha_compare",
+        "get_fundamentals",
+        "analyze_trade_journal",
+        "create_hypothesis",
+        "search_hypotheses",
         "start_research_goal",
         "get_research_goal",
         "add_goal_evidence",
