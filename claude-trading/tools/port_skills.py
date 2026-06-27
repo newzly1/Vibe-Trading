@@ -4,7 +4,7 @@
 Reads ``agent/src/skills/<name>/`` and writes
 ``claude-trading/.claude/skills/vt-<name>/``, rewriting references to removed
 MCP tools into native Claude Code tools and ``load_skill()`` calls into
-cross-skill links. Idempotent and re-runnable.
+cross-skill links. Re-runnable (each target skill dir is rewritten in place; orphaned vt-* dirs are not auto-removed).
 
 Usage:
     python port_skills.py [SRC_ROOT] [OUT_ROOT]

@@ -14,8 +14,6 @@ import re
 import sys
 from pathlib import Path
 
-import pytest
-
 TOOLS_DIR = Path(__file__).resolve().parent
 REPO_ROOT = TOOLS_DIR.parents[1]
 SRC_SKILLS = REPO_ROOT / "agent" / "src" / "skills"

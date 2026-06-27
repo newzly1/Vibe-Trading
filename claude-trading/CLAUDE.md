@@ -61,6 +61,8 @@ Connected via `.mcp.json` to the `vibe-trading-mcp` server, exposing 42 tools:
 
 V-T's 28 YAML swarm presets are being ported to a two-layer architecture: **Skills** (knowledge/roles) + **Workflows** (deterministic DAG orchestration). This gives you the preset knowledge without V-T's ReAct agent loop.
 
+> **Interim status (Plan 2):** the 3 `vt-swarm-*` skills and `.claude/workflows/*.js` described below were removed during the skills port and are being re-ported in Plan 3. Until then the swarm skills and `/workflow` commands here are not yet available — use direct `Agent` dispatch following the skill guidance instead.
+
 **Ported presets (3/28)**:
 
 | Preset | Skill | Workflow | Use Case |
