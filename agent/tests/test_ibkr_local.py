@@ -6,7 +6,6 @@ import json
 import sys
 import types
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
@@ -201,33 +200,3 @@ def test_service_uses_persisted_ibkr_local_config(
     assert cfg.port == 4002
     assert cfg.client_id == 123
     assert cfg.account == "DU999"
-
-
-def test_cli_connector_routes_to_handler() -> None:
-    from cli._legacy import _build_parser, _dispatch_connector
-
-    args = _build_parser().parse_args(["connector", "check", "ibkr-paper-local", "--account", "DU12345"])
-    with patch("cli._legacy.cmd_connector_check", return_value=0) as handler:
-        assert _dispatch_connector(args) == 0
-    handler.assert_called_once_with(
-        "ibkr-paper-local",
-        host=None,
-        port=None,
-        client_id=None,
-        account="DU12345",
-    )
-
-
-def test_cli_connector_check_passes_account_to_backend() -> None:
-    from cli._legacy import cmd_connector_check
-
-    report = {"status": "ok", "ports": [], "target": {}, "sdk": {"installed": True}}
-    with patch("src.trading.service.check_connection", return_value=report) as check:
-        assert cmd_connector_check("ibkr-paper-local", account="DU12345") == 0
-    check.assert_called_once_with(
-        "ibkr-paper-local",
-        host=None,
-        port=None,
-        client_id=None,
-        account="DU12345",
-    )

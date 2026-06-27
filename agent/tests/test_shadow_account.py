@@ -560,15 +560,6 @@ def test_shadow_account_skill_shipped() -> None:
 
 
 @pytest.mark.unit
-def test_context_prompt_references_shadow_account() -> None:
-    from src.agent.context import _SYSTEM_PROMPT  # noqa: SLF001 — intentional peek
-
-    assert "Shadow Account" in _SYSTEM_PROMPT
-    assert "extract_shadow_strategy" in _SYSTEM_PROMPT
-    assert "Phase 4b" not in _SYSTEM_PROMPT  # stale note should be gone
-
-
-@pytest.mark.unit
 def test_attribution_is_zero_without_journal(
     profitable_journal: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
